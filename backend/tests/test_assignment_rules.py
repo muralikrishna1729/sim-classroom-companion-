@@ -12,14 +12,26 @@ def test_pending_can_be_acknowledged_or_started() -> None:
     }
 
 
-def test_blocked_can_resume_or_be_submitted() -> None:
-    assert ALLOWED_RECIPIENT_TRANSITIONS[RecipientStatus.BLOCKED] == {
-        RecipientStatus.IN_PROGRESS,
-        RecipientStatus.SUBMITTED,
+def test_in_progress_can_be_blocked_but_submission_uses_dedicated_service() -> None:
+    assert ALLOWED_RECIPIENT_TRANSITIONS[RecipientStatus.IN_PROGRESS] == {
+        RecipientStatus.BLOCKED,
     }
 
 
-def test_completed_is_terminal() -> None:
+def test_blocked_can_only_resume_through_progress_service() -> None:
+    assert ALLOWED_RECIPIENT_TRANSITIONS[RecipientStatus.BLOCKED] == {
+        RecipientStatus.IN_PROGRESS,
+    }
+
+
+def test_needs_revision_can_resume_work() -> None:
+    assert ALLOWED_RECIPIENT_TRANSITIONS[RecipientStatus.NEEDS_REVISION] == {
+        RecipientStatus.IN_PROGRESS,
+    }
+
+
+def test_submitted_and_completed_are_not_student_progress_updates() -> None:
+    assert ALLOWED_RECIPIENT_TRANSITIONS[RecipientStatus.SUBMITTED] == set()
     assert ALLOWED_RECIPIENT_TRANSITIONS[RecipientStatus.COMPLETED] == set()
 
 
