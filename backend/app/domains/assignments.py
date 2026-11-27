@@ -35,10 +35,10 @@ class DomainRuleViolation(ValueError):
 ALLOWED_RECIPIENT_TRANSITIONS: dict[RecipientStatus, set[RecipientStatus]] = {
     RecipientStatus.PENDING: {RecipientStatus.ACKNOWLEDGED, RecipientStatus.IN_PROGRESS},
     RecipientStatus.ACKNOWLEDGED: {RecipientStatus.IN_PROGRESS},
-    RecipientStatus.IN_PROGRESS: {RecipientStatus.BLOCKED, RecipientStatus.SUBMITTED},
-    RecipientStatus.BLOCKED: {RecipientStatus.IN_PROGRESS, RecipientStatus.SUBMITTED},
-    RecipientStatus.SUBMITTED: {RecipientStatus.NEEDS_REVISION, RecipientStatus.COMPLETED},
-    RecipientStatus.NEEDS_REVISION: {RecipientStatus.IN_PROGRESS, RecipientStatus.SUBMITTED},
+    RecipientStatus.IN_PROGRESS: {RecipientStatus.BLOCKED},
+    RecipientStatus.BLOCKED: {RecipientStatus.IN_PROGRESS},
+    RecipientStatus.SUBMITTED: set(),
+    RecipientStatus.NEEDS_REVISION: {RecipientStatus.IN_PROGRESS},
     RecipientStatus.COMPLETED: set(),
 }
 
