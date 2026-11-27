@@ -1,0 +1,1 @@
+Migration scripts are generated with alembic revision --autogenerate after ORM models are added. Apply them with alembic upgrade head.
