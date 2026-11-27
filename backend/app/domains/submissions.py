@@ -13,7 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    Assignment,
     AssignmentRecipient,
+    AssignmentStatus,
     RecipientStatus,
     Submission,
 )
@@ -33,12 +35,15 @@ async def create_submission(
 ) -> Submission:
     """Create a submission for the authenticated student's own recipient."""
     clean_text = text_content.strip() if text_content else None
+    file_metadata_supplied = any(
+        value is not None for value in (file_path, file_name, mime_type, file_size_bytes)
+    )
     has_file = bool(file_path and file_name and mime_type and file_size_bytes is not None)
 
+    if file_metadata_supplied and not has_file:
+        raise DomainRuleViolation("File path, name, MIME type and size must be supplied together.")
     if not clean_text and not has_file:
         raise DomainRuleViolation("A submission must contain text or a complete file reference.")
-    if file_path and not has_file:
-        raise DomainRuleViolation("File path, name, MIME type and size must be supplied together.")
     if file_size_bytes is not None and file_size_bytes <= 0:
         raise DomainRuleViolation("File size must be positive.")
     if file_name and ("/" in file_name or "\\" in file_name):
@@ -46,8 +51,12 @@ async def create_submission(
 
     result = await session.execute(
         select(AssignmentRecipient)
-        .where(AssignmentRecipient.id == recipient_id)
-        .with_for_update()
+        .join(Assignment, Assignment.id == AssignmentRecipient.assignment_id)
+        .where(
+            AssignmentRecipient.id == recipient_id,
+            Assignment.status == AssignmentStatus.ASSIGNED,
+        )
+        .with_for_update(of=AssignmentRecipient)
     )
     recipient = result.scalar_one_or_none()
     if recipient is None:
