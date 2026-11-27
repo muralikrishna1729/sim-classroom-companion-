@@ -8,8 +8,10 @@
 - [x] Alembic environment
 - [x] Initial relational ORM models and metadata tests
 - [ ] Validate container build and local startup
-- [ ] Generate and review the initial Alembic migration
-- [ ] Apply migration against local PostgreSQL
+- [x] Generate and review an ephemeral Alembic migration in GitHub Actions
+- [x] Apply migration against PostgreSQL in GitHub Actions
+- [x] Confirm GitHub Actions backend checks passed (user-verified)
+- [x] Check ORM metadata against the migrated PostgreSQL schema in CI
 
 ## Phase 2 — Identity and school structure
 - [ ] Email/password authentication and secure sessions
