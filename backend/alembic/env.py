@@ -7,8 +7,8 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
 from app.db.base import Base
+import app.db.models  # noqa: F401 — register ORM tables in Base.metadata
 
-# Import ORM model modules here as they are introduced.
 target_metadata = Base.metadata
 config = context.config
 settings = get_settings()
