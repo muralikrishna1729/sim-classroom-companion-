@@ -315,6 +315,16 @@ class Submission(TimestampMixin, Base):
     __tablename__ = "submissions"
     __table_args__ = (
         Index("ix_submissions_recipient_created", "assignment_recipient_id", "created_at"),
+        CheckConstraint(
+            "(text_content IS NOT NULL AND length(trim(text_content)) > 0) OR file_path IS NOT NULL",
+            name="ck_submission_has_text_or_file",
+        ),
+        CheckConstraint(
+            "(file_path IS NULL AND file_name IS NULL AND mime_type IS NULL AND file_size_bytes IS NULL) "
+            "OR (file_path IS NOT NULL AND file_name IS NOT NULL AND mime_type IS NOT NULL "
+            "AND file_size_bytes IS NOT NULL AND file_size_bytes > 0)",
+            name="ck_submission_file_metadata_complete",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
