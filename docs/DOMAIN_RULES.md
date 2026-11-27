@@ -12,27 +12,33 @@ Assignments are created for one classroom and resolved into individual recipient
 - The actor must have an active teacher membership in the target classroom.
 - The school must be active and the assignment timezone must match its configured IANA timezone.
 - A supplied deadline must be timezone-aware and is normalized to UTC before persistence.
+- Group membership changes require an active teacher membership in the group's classroom, and the student must have an active student membership in that same classroom.
 
 ## Progress transitions
 
-Student-owned transitions are validated by the assignment domain service:
+Student-owned progress transitions:
 
 - pending -> acknowledged | in_progress
 - acknowledged -> in_progress
-- in_progress -> blocked | submitted
-- blocked -> in_progress | submitted
-- submitted -> needs_revision | completed
-- needs_revision -> in_progress | submitted
+- in_progress -> blocked
+- blocked -> in_progress
+- submitted -> completed (teacher review only)
+- submitted -> needs_revision (teacher review only)
+- needs_revision -> in_progress (student resumes work)
 - completed -> no further transition
 
-A blocked transition requires a non-empty reason. A blocked reason cannot be supplied for another status. The service locks the recipient row while applying the transition.
+Submission is not a generic status update. It must go through the submission service, which locks the recipient row, verifies the authenticated actor is the assigned student, verifies the assignment is still assigned, validates text or complete file metadata, creates the submission and changes the recipient to submitted in the same transaction.
 
-Only the assigned student can use this student-progress operation. Teacher review transitions are separate and must be implemented in a teacher-authorized service.
+A blocked transition requires a non-empty reason. A blocked reason cannot be supplied for another status. Progress updates lock the recipient row to serialize concurrent changes.
+
+Only the assigned student can use student-progress and submission operations. Teacher review transitions and feedback require a separate teacher-authorized service.
 
 ## Transaction ownership
 
-Domain services flush changes but do not commit. The API or worker unit-of-work owns the transaction and must commit on success or roll back on failure. Assignment and recipient creation must be performed in the same transaction.
+Domain services flush changes but do not commit. The API or worker unit-of-work owns the transaction and must commit on success or roll back on failure. Assignment and recipient creation, and submission plus recipient-state update, must each occur in one transaction.
 
-## Remaining database-level integrity work
+## Database constraints and service checks
 
-Some cross-table rules cannot be guaranteed by the current simple foreign keys alone, including ensuring a group member's class membership matches the group's classroom and ensuring a submission author matches the recipient student. The domain service checks are necessary, and composite foreign keys or carefully designed database constraints should be considered before production.
+Database unique constraints protect duplicate class memberships, group memberships, assignment recipients, Telegram identities and invite token hashes. Check constraints protect invite usage counts and reminder attempt counts.
+
+Domain services enforce rules that the current foreign keys alone cannot prove: the actor's classroom role, student membership in the group's classroom, and the identity of the submission author. Before production, evaluate composite foreign keys or database constraints for cross-table classroom consistency and submission-author consistency. Service checks are not a substitute for transactionally enforced database integrity when multiple writers can modify the same records.
