@@ -6,6 +6,7 @@ This keeps assignment and recipient writes atomic at the request/job boundary.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from uuid import UUID
 
 from sqlalchemy import select
@@ -72,7 +73,11 @@ async def create_assignment(
     clean_timezone = timezone_name.strip()
     if not clean_title or not clean_instructions or not clean_timezone:
         raise DomainRuleViolation("Title, instructions and school timezone are required.")
-    if due_at is not None and due_at.tzinfo is None:
+    try:
+        ZoneInfo(clean_timezone)
+    except ZoneInfoNotFoundError as exc:
+        raise DomainRuleViolation("A valid IANA school timezone is required.") from exc
+    if due_at is not None and (due_at.tzinfo is None or due_at.utcoffset() is None):
         raise DomainRuleViolation("due_at must be timezone-aware.")
 
     result = await session.execute(
@@ -86,6 +91,8 @@ async def create_assignment(
     classroom, school = pair
     if not school.is_active:
         raise DomainRuleViolation("The school is inactive.")
+    if clean_timezone != school.timezone:
+        raise DomainRuleViolation("Assignment timezone must match the school timezone.")
 
     teacher_result = await session.execute(
         select(ClassMembership.id)
@@ -175,7 +182,7 @@ async def create_assignment(
         instructions=clean_instructions,
         target_type=target_type,
         status=AssignmentStatus.ASSIGNED,
-        due_at=due_at,
+        due_at=due_at.astimezone(timezone.utc) if due_at is not None else None,
         timezone=clean_timezone,
     )
     session.add(assignment)
