@@ -42,3 +42,14 @@ def test_telegram_identity_is_unique_per_user_and_telegram_account() -> None:
     }
     assert ("telegram_user_id",) in unique_column_sets
     assert ("user_id",) in unique_column_sets
+
+
+def test_submission_requires_text_or_complete_file_metadata() -> None:
+    table = Base.metadata.tables["submissions"]
+    check_names = {
+        constraint.name
+        for constraint in table.constraints
+        if constraint.__class__.__name__ == "CheckConstraint"
+    }
+    assert "ck_submission_has_text_or_file" in check_names
+    assert "ck_submission_file_metadata_complete" in check_names
