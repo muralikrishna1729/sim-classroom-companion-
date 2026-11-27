@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import (
     ClassMembership,
     ClassRole,
-    Classroom,
     MembershipStatus,
     StudentGroup,
     StudentGroupMembership,
