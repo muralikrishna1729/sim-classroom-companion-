@@ -17,6 +17,23 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: classroom_companion
+          POSTGRES_USER: classroom_app
+          POSTGRES_PASSWORD: classroom_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U classroom_app -d classroom_companion"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PYTHONPATH: backend
+      DATABASE_URL: postgresql+asyncpg://classroom_app:classroom_ci_password@localhost:5432/classroom_companion
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -31,7 +48,17 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install -r backend/requirements.txt
 
+      - name: Generate an ephemeral schema migration
+        working-directory: backend
+        run: alembic revision --autogenerate -m "CI schema validation"
+
+      - name: Apply generated schema migration
+        working-directory: backend
+        run: alembic upgrade head
+
+      - name: Check model and database schema are in sync
+        working-directory: backend
+        run: alembic check
+
       - name: Run backend tests
-        env:
-          PYTHONPATH: backend
         run: python -m pytest backend/tests -q
