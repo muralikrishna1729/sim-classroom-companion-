@@ -227,8 +227,12 @@ async def transition_recipient_status(
     """Apply a student-owned progress transition while locking the recipient row."""
     result = await session.execute(
         select(AssignmentRecipient)
-        .where(AssignmentRecipient.id == recipient_id)
-        .with_for_update()
+        .join(Assignment, Assignment.id == AssignmentRecipient.assignment_id)
+        .where(
+            AssignmentRecipient.id == recipient_id,
+            Assignment.status == AssignmentStatus.ASSIGNED,
+        )
+        .with_for_update(of=AssignmentRecipient)
     )
     recipient = result.scalar_one_or_none()
     if recipient is None:
