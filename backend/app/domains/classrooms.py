@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import (
     ClassMembership,
     ClassRole,
+    Classroom,
     MembershipStatus,
     StudentGroup,
     StudentGroupMembership,
@@ -19,6 +20,7 @@ from app.domains.assignments import DomainRuleViolation
 async def add_student_to_group(
     session: AsyncSession,
     *,
+    actor_user_id: UUID,
     group_id: UUID,
     student_id: UUID,
 ) -> StudentGroupMembership:
@@ -29,6 +31,17 @@ async def add_student_to_group(
     group = result.scalar_one_or_none()
     if group is None:
         raise DomainRuleViolation("Student group does not exist.")
+
+    actor_result = await session.execute(
+        select(ClassMembership.id).where(
+            ClassMembership.classroom_id == group.classroom_id,
+            ClassMembership.user_id == actor_user_id,
+            ClassMembership.role == ClassRole.TEACHER,
+            ClassMembership.status == MembershipStatus.ACTIVE,
+        )
+    )
+    if actor_result.scalar_one_or_none() is None:
+        raise DomainRuleViolation("An active teacher membership is required to manage this group.")
 
     result = await session.execute(
         select(ClassMembership.id).where(
