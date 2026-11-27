@@ -236,6 +236,11 @@ async def transition_recipient_status(
     if recipient.student_id != actor_user_id:
         raise DomainRuleViolation("Only the assigned student may update this progress.")
 
+    if new_status == RecipientStatus.SUBMITTED:
+        raise DomainRuleViolation("Use the submission service to submit work.")
+    if new_status == RecipientStatus.NEEDS_REVISION:
+        raise DomainRuleViolation("Only an authorized teacher review can request revision.")
+
     reason = blocked_reason.strip() if blocked_reason else None
     if new_status == RecipientStatus.BLOCKED and not reason:
         raise DomainRuleViolation("A blocked status requires a reason.")
