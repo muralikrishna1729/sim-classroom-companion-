@@ -19,7 +19,7 @@ The application is a modular monolith. Business rules belong in backend domain/a
 
 ## Local backend setup
 
-1. Copy `backend/.env.example` to `backend/.env` and fill in local values.
+1. Copy `backend/.env.example` to `backend/.env` and fill in local values. Do not commit this file.
 2. Start PostgreSQL:
 
    ```bash
@@ -31,9 +31,10 @@ The application is a modular monolith. Business rules belong in backend domain/a
    ```bash
    cd backend
    python -m venv .venv
-   # Windows PowerShell: .venv\Scripts\Activate.ps1
+   # Windows PowerShell: .venv\\Scripts\\Activate.ps1
    # macOS/Linux: source .venv/bin/activate
    pip install -r requirements.txt
+   cd ..
    ```
 
 4. Run the API from the repository root:
@@ -55,12 +56,16 @@ The application is a modular monolith. Business rules belong in backend domain/a
 Run tests from the repository root with:
 
 ```bash
+# Windows PowerShell
+$env:PYTHONPATH = "backend"
+# macOS/Linux
+export PYTHONPATH=backend
 pytest backend/tests
 ```
 
 ## Docker
 
-`docker compose up --build` starts PostgreSQL and the API. The API container waits for the database health check before starting.
+After creating `backend/.env` from the example, `docker compose up --build` starts PostgreSQL and the API. The API container waits for the database health check before starting.
 
 ## Configuration and secrets
 
