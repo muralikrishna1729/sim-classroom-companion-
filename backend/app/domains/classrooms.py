@@ -162,7 +162,12 @@ async def list_user_classrooms(
     *,
     user_id: UUID,
 ) -> list[Classroom]:
-    """List classrooms managed by the user or joined by the user."""
+    """List classrooms managed by the user or joined by the user.
+
+    Execute the two ORM queries separately. Combining ORM entity selects with
+    UNION can cause SQLAlchemy to expose only the first selected column rather
+    than mapped Classroom instances on some dialect/result paths.
+    """
 
     coordinator_query = (
         select(Classroom)
@@ -194,8 +199,22 @@ async def list_user_classrooms(
         )
     )
 
-    result = await db.execute(coordinator_query.union(member_query))
-    return list(result.scalars().all())
+    coordinator_result = await db.execute(coordinator_query)
+    member_result = await db.execute(member_query)
+
+    # Deduplicate users who may qualify through both access paths.
+    classrooms_by_id = {
+        classroom.id: classroom
+        for classroom in coordinator_result.scalars().all()
+    }
+    classrooms_by_id.update(
+        {
+            classroom.id: classroom
+            for classroom in member_result.scalars().all()
+        }
+    )
+
+    return list(classrooms_by_id.values())
 
 
 async def add_student_to_group(
