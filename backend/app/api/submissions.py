@@ -9,9 +9,19 @@ from app.db.models import User
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.domains.assignments import DomainRuleViolation
-from app.domains.submissions import (\n    create_submission,\n    get_student_submission_feedback,\n    get_student_assignment_history,\n)
+from app.domains.submissions import (
+    create_submission,
+    get_student_submission_feedback,
+    get_student_assignment_history,
+)
 from app.schemas.assignment import SubmissionResponse
-from app.schemas.review import (\n    StudentFeedbackItem,\n    StudentSubmissionFeedbackResponse,\n    StudentAssignmentHistoryResponse,\n    StudentAssignmentHistoryAttempt,\n    StudentAssignmentHistoryFeedback,\n)
+from app.schemas.review import (
+    StudentFeedbackItem,
+    StudentSubmissionFeedbackResponse,
+    StudentAssignmentHistoryResponse,
+    StudentAssignmentHistoryAttempt,
+    StudentAssignmentHistoryFeedback,
+)
 from app.storage.local import save_submission_file, delete_submission_file
 
 router = APIRouter(prefix="/assignments", tags=["Submissions"])
