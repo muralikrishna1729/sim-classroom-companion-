@@ -16,6 +16,7 @@ from app.db.models import (
     Classroom,
     Feedback,
     MembershipStatus,
+    Notification,
     RecipientStatus,
     School,
     Submission,
@@ -110,6 +111,12 @@ def test_teacher_review_saves_feedback_and_completes_submission():
             assert recipient.id == recipient_id
             assert recipient.status == RecipientStatus.COMPLETED
             assert recipient.completed_at is not None
+            notification = await session.scalar(
+                select(Notification).where(Notification.entity_id == submission_id)
+            )
+            assert notification.user_id == recipient.student_id
+            assert notification.notification_type == "submission_approved"
+            assert notification.entity_type == "submission"
 
             saved_feedback = await session.scalar(
                 select(Feedback).where(Feedback.submission_id == submission_id)
@@ -203,6 +210,12 @@ def test_teacher_can_request_revision_with_written_feedback():
             assert recipient.id == recipient_id
             assert recipient.status == RecipientStatus.NEEDS_REVISION
             assert recipient.completed_at is None
+            notification = await session.scalar(
+                select(Notification).where(Notification.entity_id == submission_id)
+            )
+            assert notification.user_id == recipient.student_id
+            assert notification.notification_type == "revision_requested"
+            assert notification.payload["assignment_title"] == "Math Assignment"
 
         await engine.dispose()
 
