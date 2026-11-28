@@ -21,6 +21,7 @@ from app.db.models import (
     User,
 )
 from app.domains.assignments import DomainRuleViolation
+from app.domains.notifications import create_notification
 
 
 async def review_submission(
@@ -100,6 +101,25 @@ async def review_submission(
 
     session.add(feedback)
     await session.flush()
+
+    approved = decision == RecipientStatus.COMPLETED
+    await create_notification(
+        session,
+        user_id=recipient.student_id,
+        notification_type="submission_approved" if approved else "revision_requested",
+        title="Submission approved" if approved else "Revision requested",
+        message=(
+            f'Your submission for "{assignment.title}" was approved.'
+            if approved
+            else f'Your submission for "{assignment.title}" needs revision.'
+        ),
+        entity_type="submission",
+        entity_id=submission.id,
+        payload={
+            "assignment_title": assignment.title,
+            "recipient_id": str(recipient.id),
+        },
+    )
     return submission, feedback, recipient
 
 
