@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     default_school_timezone: str = "Asia/Kolkata"
 
+    # Authentication settings. The secret must be supplied through the environment.
+    jwt_secret_key: str | None = Field(default=None, min_length=32)
+    access_token_expire_minutes: int = Field(default=30, gt=0, le=1440)
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
