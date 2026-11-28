@@ -25,6 +25,13 @@ class AssignmentCreateRequest(BaseModel):
             raise ValueError("This field cannot be blank.")
         return value
 
+    @field_validator("title")
+    @classmethod
+    def require_two_character_title(cls, value: str) -> str:
+        if len(value) < 2:
+            raise ValueError("Title must contain at least 2 non-whitespace characters.")
+        return value
+
 
 class AssignmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -44,6 +51,20 @@ class AssignmentResponse(BaseModel):
 class RecipientProgressRequest(BaseModel):
     status: RecipientStatus
     blocked_reason: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("status")
+    @classmethod
+    def restrict_student_progress_status(cls, value: RecipientStatus) -> RecipientStatus:
+        allowed = {
+            RecipientStatus.ACKNOWLEDGED,
+            RecipientStatus.IN_PROGRESS,
+            RecipientStatus.BLOCKED,
+        }
+        if value not in allowed:
+            raise ValueError(
+                "Students may only set progress to acknowledged, in_progress, or blocked."
+            )
+        return value
 
     @field_validator("blocked_reason")
     @classmethod
