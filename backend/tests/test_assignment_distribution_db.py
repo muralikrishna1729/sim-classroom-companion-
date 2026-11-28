@@ -162,8 +162,16 @@ def test_assignment_with_due_date_schedules_one_24_hour_reminder_per_recipient()
         )).all())
         assert len(reminders) == 3
         assert {item.status for item in reminders} == {ReminderStatus.PENDING}
+        # SQLite does not preserve timezone metadata for DateTime columns.
+        expected_scheduled_at = due_at - timedelta(hours=24)
         assert all(
-            abs((item.scheduled_at - (due_at - timedelta(hours=24))).total_seconds()) < 1
+            abs(
+                (
+                    (item.scheduled_at.replace(tzinfo=timezone.utc)
+                     if item.scheduled_at.tzinfo is None else item.scheduled_at)
+                    - expected_scheduled_at
+                ).total_seconds()
+            ) < 1
             for item in reminders
         )
         assert len({item.idempotency_key for item in reminders}) == 3
