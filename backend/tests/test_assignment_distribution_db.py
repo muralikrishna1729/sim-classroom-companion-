@@ -135,6 +135,7 @@ def test_class_assignment_creates_recipient_for_each_active_student():
         assert {item.user_id for item in notifications} == {student.id for student in students[:3]}
         assert all(item.notification_type == "assignment_assigned" for item in notifications)
         assert all(item.entity_type == "assignment" for item in notifications)
+        assert await session.scalar(select(Reminder.id)) is None
 
     run_test(scenario)
 
