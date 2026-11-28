@@ -92,12 +92,22 @@ def test_teacher_lists_only_submissions_in_their_classroom():
                 actor_user_id=teacher.id,
             )
             assert len(rows) == 1
-            listed_submission, listed_recipient, listed_assignment, student_id, student_name = rows[0]
+            (
+                listed_submission,
+                listed_recipient,
+                listed_assignment,
+                student_id,
+                student_name,
+                attempt_number,
+                total_attempts,
+            ) = rows[0]
             assert listed_submission.id == submission.id
             assert listed_recipient.id == recipient.id
             assert listed_assignment.title == "Math Assignment"
             assert student_id == student.id
             assert student_name == "Student A"
+            assert attempt_number == 1
+            assert total_attempts == 1
             assert "file_path" not in TeacherSubmissionListItem.model_fields
 
             with pytest.raises(DomainRuleViolation, match="active teacher membership"):
