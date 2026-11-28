@@ -16,6 +16,7 @@ from app.db.models import (
     ClassRole,
     Classroom,
     MembershipStatus,
+    Notification,
     RecipientStatus,
     School,
     StudentGroup,
@@ -125,6 +126,12 @@ def test_class_assignment_creates_recipient_for_each_active_student():
         }
         assert len(recipients) == 3
         assert all(row.status == RecipientStatus.PENDING for row in recipients)
+        notifications = list((await session.scalars(
+            select(Notification).where(Notification.entity_id == assignment.id)
+        )).all())
+        assert {item.user_id for item in notifications} == {student.id for student in students[:3]}
+        assert all(item.notification_type == "assignment_assigned" for item in notifications)
+        assert all(item.entity_type == "assignment" for item in notifications)
 
     run_test(scenario)
 
