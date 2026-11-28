@@ -1,5 +1,6 @@
 """Database-backed tests for student resubmission after teacher revision requests."""
 import asyncio
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -87,6 +88,7 @@ def test_student_can_resubmit_after_revision_and_history_is_preserved():
                 actor_user_id=student.id,
                 text_content="Water evaporates and forms clouds.",
             )
+            first_submission.created_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
             await session.commit()
 
             _, first_feedback, reviewed_recipient = await review_submission(
