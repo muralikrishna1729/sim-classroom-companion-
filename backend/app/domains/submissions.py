@@ -65,8 +65,14 @@ async def create_submission(
         raise DomainRuleViolation("Assignment recipient does not exist.")
     if recipient.student_id != actor_user_id:
         raise DomainRuleViolation("Only the assigned student may submit this work.")
-    if recipient.status not in {RecipientStatus.IN_PROGRESS, RecipientStatus.BLOCKED}:
-        raise DomainRuleViolation("This assignment is not currently accepting a submission.")
+    if recipient.status not in {
+        RecipientStatus.IN_PROGRESS,
+        RecipientStatus.BLOCKED,
+        RecipientStatus.NEEDS_REVISION,
+    }:
+        raise DomainRuleViolation(
+            "This assignment is not currently accepting a submission or revision."
+        )
 
     submission = Submission(
         assignment_recipient_id=recipient.id,
