@@ -5,7 +5,7 @@ The caller owns the transaction. This service flushes changes but never commits.
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -80,6 +80,15 @@ async def review_submission(
     if recipient.status != RecipientStatus.SUBMITTED:
         raise DomainRuleViolation("Only submitted assignments can be reviewed.")
 
+    latest_submission_id = await session.scalar(
+        select(Submission.id)
+        .where(Submission.assignment_recipient_id == recipient.id)
+        .order_by(Submission.created_at.desc(), Submission.id.desc())
+        .limit(1)
+    )
+    if latest_submission_id != submission.id:
+        raise DomainRuleViolation("Only the latest submission attempt can be reviewed.")
+
     feedback = Feedback(
         submission_id=submission.id,
         author_id=actor_user_id,
@@ -99,7 +108,7 @@ async def list_classroom_submissions(
     *,
     classroom_id: UUID,
     actor_user_id: UUID,
-) -> list[tuple[Submission, AssignmentRecipient, Assignment, UUID, str]]:
+) -> list[tuple[Submission, AssignmentRecipient, Assignment, UUID, str, int, int]]:
     """List submissions in a classroom after verifying active teacher access.
 
     The result includes the student's ID and display name, but never exposes
@@ -125,6 +134,13 @@ async def list_classroom_submissions(
             Assignment,
             AssignmentRecipient.student_id,
             User.full_name,
+            func.row_number().over(
+                partition_by=AssignmentRecipient.id,
+                order_by=(Submission.created_at.asc(), Submission.id.asc()),
+            ).label("attempt_number"),
+            func.count(Submission.id).over(
+                partition_by=AssignmentRecipient.id,
+            ).label("total_attempts"),
         )
         .join(
             AssignmentRecipient,
