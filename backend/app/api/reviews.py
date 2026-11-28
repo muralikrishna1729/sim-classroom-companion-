@@ -18,6 +18,7 @@ from app.schemas.review import (
 )
 
 router = APIRouter(prefix="/reviews", tags=["Teacher Reviews"])
+teacher_submissions_router = APIRouter(prefix="/classrooms", tags=["Teacher Submissions"])
 
 
 @router.post(
@@ -66,8 +67,8 @@ async def review_submission_endpoint(
     )
 
 
-@router.get(
-    "/classrooms/{classroom_id}/submissions",
+@teacher_submissions_router.get(
+    "/{classroom_id}/submissions",
     response_model=list[TeacherSubmissionListItem],
 )
 async def get_classroom_submissions(
