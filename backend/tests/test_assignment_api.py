@@ -299,3 +299,59 @@ def test_teacher_can_create_targeted_assignment(
     assert captured[target_field] == target_ids
     assert captured["target_type"] == AssignmentTargetType(target_type)
     assert response.json()["target_type"] == target_type
+
+
+
+def test_teacher_can_get_assignment_progress(client, student, monkeypatch):
+    authenticate_as(student)
+    assignment_id = uuid4()
+    recipient_id = uuid4()
+    student_id = uuid4()
+    recipient = SimpleNamespace(
+        id=recipient_id,
+        student_id=student_id,
+        status=RecipientStatus.IN_PROGRESS,
+        blocked_reason=None,
+        acknowledged_at=None,
+        submitted_at=None,
+        completed_at=None,
+    )
+    assignment = SimpleNamespace(id=assignment_id, status=AssignmentStatus.ASSIGNED)
+    captured = {}
+
+    async def progress(db, **kwargs):
+        captured.update(kwargs)
+        return assignment, [recipient], {recipient_id: "Learner One"}
+
+    monkeypatch.setattr("app.api.assignments.get_teacher_assignment_progress", progress)
+    response = client.get(f"/api/v1/assignments/{assignment_id}/progress")
+
+    assert response.status_code == 200
+    assert captured["assignment_id"] == assignment_id
+    assert captured["actor_user_id"] == student.id
+    data = response.json()
+    assert data["total_recipients"] == 1
+    assert data["status_counts"] == {"in_progress": 1}
+    assert data["recipients"][0]["student_name"] == "Learner One"
+
+
+def test_teacher_can_cancel_assignment(client, student, monkeypatch):
+    authenticate_as(student)
+    assignment_id = uuid4()
+    assignment = SimpleNamespace(id=assignment_id, status=AssignmentStatus.CANCELLED)
+    captured = {}
+
+    async def cancel(db, **kwargs):
+        captured.update(kwargs)
+        return assignment
+
+    monkeypatch.setattr("app.api.assignments.cancel_assignment", cancel)
+    response = client.post(f"/api/v1/assignments/{assignment_id}/cancel")
+
+    assert response.status_code == 200
+    assert captured["assignment_id"] == assignment_id
+    assert captured["actor_user_id"] == student.id
+    assert response.json() == {
+        "assignment_id": str(assignment_id),
+        "status": "cancelled",
+    }
