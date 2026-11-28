@@ -22,11 +22,14 @@ from app.db.models import (
     StudentGroupMembership,
     User,
 )
+from app.domains.submissions import create_submission
 from app.domains.assignments import (
     DomainRuleViolation,
     create_assignment,
     get_teacher_assignment_progress,
     cancel_assignment,
+    list_user_assignments,
+    transition_recipient_status,
 )
 
 
@@ -383,5 +386,55 @@ def test_cancelling_assignment_preserves_recipient_history_and_blocks_repeat_can
             await cancel_assignment(
                 session, assignment_id=assignment.id, actor_user_id=teacher.id
             )
+
+    run_test(scenario)
+
+
+
+def test_cancelled_assignment_remains_visible_but_rejects_student_writes():
+    async def scenario(session):
+        _, teacher, students, classroom, _ = await seed_classroom(session)
+        assignment = await create_assignment(
+            session,
+            actor_user_id=teacher.id,
+            classroom_id=classroom.id,
+            title="Cancelled task",
+            instructions="This task will be cancelled.",
+            target_type=AssignmentTargetType.INDIVIDUAL,
+            timezone_name="Asia/Kolkata",
+            student_ids=[students[0].id],
+        )
+        recipient = await session.scalar(
+            select(AssignmentRecipient).where(
+                AssignmentRecipient.assignment_id == assignment.id
+            )
+        )
+        await cancel_assignment(
+            session, assignment_id=assignment.id, actor_user_id=teacher.id
+        )
+        visible = await list_user_assignments(
+            session, user_id=students[0].id, classroom_id=classroom.id
+        )
+        assert len(visible) == 1
+        assert visible[0][0].status == AssignmentStatus.CANCELLED
+        assert visible[0][1].id == recipient.id
+
+        with pytest.raises(DomainRuleViolation, match="recipient does not exist"):
+            await transition_recipient_status(
+                session,
+                recipient_id=recipient.id,
+                actor_user_id=students[0].id,
+                new_status=RecipientStatus.IN_PROGRESS,
+            )
+        await session.rollback()
+
+        with pytest.raises(DomainRuleViolation, match="recipient does not exist"):
+            await create_submission(
+                session,
+                recipient_id=recipient.id,
+                actor_user_id=students[0].id,
+                text_content="This must not be accepted.",
+            )
+        await session.rollback()
 
     run_test(scenario)
