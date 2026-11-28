@@ -157,6 +157,8 @@ def test_worker_recovers_stale_processing_reminder_after_crash(monkeypatch):
             reminder_id = await seed_due_reminder(session)
             reminder = await session.get(Reminder, reminder_id)
             reminder.status = ReminderStatus.PROCESSING
+            # A real worker increments this before attempting delivery.
+            reminder.attempt_count = 1
             reminder.scheduled_at = datetime.now(timezone.utc) - timedelta(minutes=5)
             await session.commit()
 
