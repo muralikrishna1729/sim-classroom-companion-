@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any
 from uuid import UUID
 
 import httpx
@@ -78,10 +77,6 @@ async def _claim_due_reminders(
             .where(
                 Reminder.status == ReminderStatus.PENDING,
                 Reminder.scheduled_at <= now,
-                Assignment.status == AssignmentStatus.ASSIGNED,
-                AssignmentRecipient.status.notin_(
-                    [RecipientStatus.SUBMITTED, RecipientStatus.COMPLETED]
-                ),
             )
             .order_by(Reminder.scheduled_at, Reminder.id)
             .limit(batch_size)
@@ -199,14 +194,9 @@ async def process_due_reminders(
 
         if not token:
             error = "Telegram bot token is not configured."
-            await _finish_reminder(
-                session_factory, reminder_id=reminder_id, success=False,
-                error=error, now=current_time,
-            )
-            # Configuration is not transient; do not retry without a token.
             async with session_factory() as session:
                 reminder = await session.get(Reminder, reminder_id)
-                if reminder is not None:
+                if reminder is not None and reminder.status == ReminderStatus.PROCESSING:
                     reminder.status = ReminderStatus.FAILED
                     reminder.last_error = error
                     await session.commit()
