@@ -409,22 +409,26 @@ def test_cancelled_assignment_remains_visible_but_rejects_student_writes():
                 AssignmentRecipient.assignment_id == assignment.id
             )
         )
+        recipient_id = recipient.id
+        assignment_id = assignment.id
+        student_id = students[0].id
+        classroom_id = classroom.id
         await cancel_assignment(
-            session, assignment_id=assignment.id, actor_user_id=teacher.id
+            session, assignment_id=assignment_id, actor_user_id=teacher.id
         )
         await session.commit()
         visible = await list_user_assignments(
-            session, user_id=students[0].id, classroom_id=classroom.id
+            session, user_id=student_id, classroom_id=classroom_id
         )
         assert len(visible) == 1
         assert visible[0][0].status == AssignmentStatus.CANCELLED
-        assert visible[0][1].id == recipient.id
+        assert visible[0][1].id == recipient_id
 
         with pytest.raises(DomainRuleViolation, match="recipient does not exist"):
             await transition_recipient_status(
                 session,
-                recipient_id=recipient.id,
-                actor_user_id=students[0].id,
+                recipient_id=recipient_id,
+                actor_user_id=student_id,
                 new_status=RecipientStatus.IN_PROGRESS,
             )
         await session.rollback()
@@ -432,8 +436,8 @@ def test_cancelled_assignment_remains_visible_but_rejects_student_writes():
         with pytest.raises(DomainRuleViolation, match="recipient does not exist"):
             await create_submission(
                 session,
-                recipient_id=recipient.id,
-                actor_user_id=students[0].id,
+                recipient_id=recipient_id,
+                actor_user_id=student_id,
                 text_content="This must not be accepted.",
             )
         await session.rollback()
