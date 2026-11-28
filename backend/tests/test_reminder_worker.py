@@ -79,7 +79,7 @@ def test_worker_sends_due_reminder_and_marks_it_sent(monkeypatch):
         counts = await reminder_worker.process_due_reminders(sessions, bot_token="test-token")
         async with sessions() as session:
             reminder = await session.get(Reminder, reminder_id)
-        assert counts == {"claimed": 1, "sent": 1, "retrying": 0, "failed": 0, "cancelled": 0}
+        assert counts == {"claimed": 1, "sent": 1, "retrying": 0, "failed": 0, "cancelled": 0, "recovered": 0}
         assert reminder.status == ReminderStatus.SENT
         assert reminder.attempt_count == 1
         assert len(sent) == 1
@@ -148,5 +148,35 @@ def test_worker_cancels_reminder_when_assignment_is_cancelled(monkeypatch):
             reminder = await session.get(Reminder, reminder_id)
         assert counts["cancelled"] == 1
         assert reminder.status == ReminderStatus.CANCELLED
+
+    run_test(scenario)
+
+def test_worker_recovers_stale_processing_reminder_after_crash(monkeypatch):
+    async def scenario(sessions):
+        async with sessions() as session:
+            reminder_id = await seed_due_reminder(session)
+            reminder = await session.get(Reminder, reminder_id)
+            reminder.status = ReminderStatus.PROCESSING
+            reminder.scheduled_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+            await session.commit()
+
+        sent = []
+        async def fake_send(token, chat_id, message):
+            sent.append(chat_id)
+        monkeypatch.setattr(reminder_worker, "send_telegram_message", fake_send)
+
+        now = datetime.now(timezone.utc)
+        counts = await reminder_worker.process_due_reminders(
+            sessions, bot_token="test-token", now=now
+        )
+        async with sessions() as session:
+            reminder = await session.get(Reminder, reminder_id)
+
+        assert counts["recovered"] == 1
+        assert counts["claimed"] == 1
+        assert counts["sent"] == 1
+        assert sent == [123456789]
+        assert reminder.status == ReminderStatus.SENT
+        assert reminder.attempt_count == 2
 
     run_test(scenario)
