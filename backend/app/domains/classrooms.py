@@ -8,12 +8,194 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
     ClassMembership,
+    Classroom,
     ClassRole,
     MembershipStatus,
+    School,
+    SchoolMembership,
+    SchoolRole,
     StudentGroup,
     StudentGroupMembership,
+    User,
 )
 from app.domains.assignments import DomainRuleViolation
+
+
+class ClassroomRuleViolation(Exception):
+    """Raised when a classroom operation violates access or membership rules."""
+
+
+async def _require_school_coordinator(
+    db: AsyncSession,
+    *,
+    school_id: UUID,
+    actor_user_id: UUID,
+) -> School:
+    """Ensure the actor is an active coordinator of an active school."""
+
+    result = await db.execute(
+        select(School)
+        .join(
+            SchoolMembership,
+            SchoolMembership.school_id == School.id,
+        )
+        .where(
+            School.id == school_id,
+            School.is_active.is_(True),
+            SchoolMembership.user_id == actor_user_id,
+            SchoolMembership.role == SchoolRole.COORDINATOR,
+            SchoolMembership.status == MembershipStatus.ACTIVE,
+        )
+    )
+
+    school = result.scalar_one_or_none()
+
+    if school is None:
+        raise ClassroomRuleViolation(
+            "An active coordinator membership is required for this school."
+        )
+
+    return school
+
+
+async def create_classroom(
+    db: AsyncSession,
+    *,
+    actor_user_id: UUID,
+    school_id: UUID,
+    name: str,
+    grade_label: str | None = None,
+) -> Classroom:
+    """Create a classroom within a school managed by the coordinator."""
+
+    await _require_school_coordinator(
+        db,
+        school_id=school_id,
+        actor_user_id=actor_user_id,
+    )
+
+    classroom = Classroom(
+        school_id=school_id,
+        name=name,
+        grade_label=grade_label,
+    )
+
+    db.add(classroom)
+    await db.flush()
+
+    return classroom
+
+
+async def add_classroom_member(
+    db: AsyncSession,
+    *,
+    actor_user_id: UUID,
+    classroom_id: UUID,
+    user_id: UUID,
+    role: ClassRole,
+) -> ClassMembership:
+    """Add or reactivate a registered user as teacher or student."""
+
+    classroom_result = await db.execute(
+        select(Classroom).where(Classroom.id == classroom_id)
+    )
+    classroom = classroom_result.scalar_one_or_none()
+
+    if classroom is None:
+        raise ClassroomRuleViolation("Classroom does not exist.")
+
+    await _require_school_coordinator(
+        db,
+        school_id=classroom.school_id,
+        actor_user_id=actor_user_id,
+    )
+
+    user_result = await db.execute(
+        select(User).where(
+            User.id == user_id,
+            User.is_active.is_(True),
+        )
+    )
+    target_user = user_result.scalar_one_or_none()
+
+    if target_user is None:
+        raise ClassroomRuleViolation(
+            "The selected user does not exist or is inactive."
+        )
+
+    membership_result = await db.execute(
+        select(ClassMembership).where(
+            ClassMembership.classroom_id == classroom_id,
+            ClassMembership.user_id == user_id,
+        )
+    )
+    existing = membership_result.scalar_one_or_none()
+
+    if existing is not None:
+        if existing.role != role:
+            raise ClassroomRuleViolation(
+                "This user already has a different role in this classroom."
+            )
+
+        if existing.status == MembershipStatus.ACTIVE:
+            return existing
+
+        existing.status = MembershipStatus.ACTIVE
+        await db.flush()
+        return existing
+
+    membership = ClassMembership(
+        classroom_id=classroom_id,
+        user_id=user_id,
+        role=role,
+        status=MembershipStatus.ACTIVE,
+    )
+
+    db.add(membership)
+    await db.flush()
+
+    return membership
+
+
+async def list_user_classrooms(
+    db: AsyncSession,
+    *,
+    user_id: UUID,
+) -> list[Classroom]:
+    """List classrooms managed by the user or joined by the user."""
+
+    coordinator_query = (
+        select(Classroom)
+        .join(
+            SchoolMembership,
+            SchoolMembership.school_id == Classroom.school_id,
+        )
+        .join(
+            School,
+            School.id == Classroom.school_id,
+        )
+        .where(
+            SchoolMembership.user_id == user_id,
+            SchoolMembership.role == SchoolRole.COORDINATOR,
+            SchoolMembership.status == MembershipStatus.ACTIVE,
+            School.is_active.is_(True),
+        )
+    )
+
+    member_query = (
+        select(Classroom)
+        .join(
+            ClassMembership,
+            ClassMembership.classroom_id == Classroom.id,
+        )
+        .where(
+            ClassMembership.user_id == user_id,
+            ClassMembership.status == MembershipStatus.ACTIVE,
+        )
+    )
+
+    result = await db.execute(coordinator_query.union(member_query))
+    return list(result.scalars().all())
 
 
 async def add_student_to_group(
