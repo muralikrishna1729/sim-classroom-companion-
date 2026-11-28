@@ -22,7 +22,12 @@ from app.db.models import (
     StudentGroupMembership,
     User,
 )
-from app.domains.assignments import (\n    DomainRuleViolation,\n    create_assignment,\n    get_teacher_assignment_progress,\n    cancel_assignment,\n)
+from app.domains.assignments import (
+    DomainRuleViolation,
+    create_assignment,
+    get_teacher_assignment_progress,
+    cancel_assignment,
+)
 
 
 async def seed_classroom(session):
