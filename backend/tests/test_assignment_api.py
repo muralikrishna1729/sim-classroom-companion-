@@ -355,3 +355,34 @@ def test_teacher_can_cancel_assignment(client, student, monkeypatch):
         "assignment_id": str(assignment_id),
         "status": "cancelled",
     }
+
+
+
+def test_student_assignment_listing_shows_cancelled_assignment(client, student, monkeypatch):
+    authenticate_as(student)
+    assignment = SimpleNamespace(
+        id=uuid4(),
+        classroom_id=uuid4(),
+        created_by_id=uuid4(),
+        title="Cancelled science task",
+        instructions="This task was cancelled.",
+        target_type=AssignmentTargetType.CLASS,
+        status=AssignmentStatus.CANCELLED,
+        due_at=None,
+        timezone="Asia/Kolkata",
+    )
+    recipient = SimpleNamespace(
+        id=uuid4(),
+        status=RecipientStatus.PENDING,
+        blocked_reason=None,
+    )
+
+    async def listing(db, **kwargs):
+        return [(assignment, recipient)]
+
+    monkeypatch.setattr("app.api.assignments.list_user_assignments", listing)
+    response = client.get("/api/v1/assignments")
+
+    assert response.status_code == 200
+    assert response.json()[0]["status"] == "cancelled"
+    assert response.json()[0]["recipient_id"] == str(recipient.id)
