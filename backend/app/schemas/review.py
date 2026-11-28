@@ -49,3 +49,17 @@ class TeacherSubmissionListItem(BaseModel):
     file_name: str | None
     mime_type: str | None
     file_size_bytes: int | None
+
+
+class StudentFeedbackItem(BaseModel):
+    feedback_id: UUID
+    author_id: UUID
+    author_name: str
+    feedback_text: str
+    created_at: datetime
+
+
+class StudentSubmissionFeedbackResponse(BaseModel):
+    submission_id: UUID
+    recipient_status: RecipientStatus
+    feedback: list[StudentFeedbackItem]
