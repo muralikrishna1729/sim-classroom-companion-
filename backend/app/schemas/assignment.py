@@ -81,3 +81,20 @@ class RecipientProgressResponse(BaseModel):
     student_id: UUID
     status: RecipientStatus
     blocked_reason: str | None
+
+
+class AssignmentListItem(BaseModel):
+    """Assignment details plus progress belonging only to the requesting student."""
+
+    id: UUID
+    classroom_id: UUID
+    created_by_id: UUID
+    title: str
+    instructions: str
+    target_type: AssignmentTargetType
+    status: str
+    due_at: datetime | None
+    timezone: str
+    recipient_id: UUID | None = None
+    my_status: RecipientStatus | None = None
+    my_blocked_reason: str | None = None
