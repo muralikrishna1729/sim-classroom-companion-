@@ -126,3 +126,41 @@ async def get_student_submission_feedback(
         .order_by(Feedback.created_at.asc(), Feedback.id)
     )
     return submission, recipient, list(feedback_result.all())
+
+
+async def get_student_assignment_history(
+    session: AsyncSession,
+    *,
+    recipient_id: UUID,
+    actor_user_id: UUID,
+) -> tuple[Assignment, AssignmentRecipient, list[tuple[Submission, list[tuple[Feedback, User]]]]]:
+    """Return a student's assignment details, every submission attempt and its feedback."""
+    result = await session.execute(
+        select(Assignment, AssignmentRecipient)
+        .join(AssignmentRecipient, AssignmentRecipient.assignment_id == Assignment.id)
+        .where(
+            AssignmentRecipient.id == recipient_id,
+            AssignmentRecipient.student_id == actor_user_id,
+        )
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise DomainRuleViolation("Assignment history not found.")
+
+    assignment, recipient = row
+    submission_result = await session.execute(
+        select(Submission)
+        .where(Submission.assignment_recipient_id == recipient.id)
+        .order_by(Submission.created_at.asc(), Submission.id.asc())
+    )
+    submissions = list(submission_result.scalars().all())
+    history = []
+    for submission in submissions:
+        feedback_result = await session.execute(
+            select(Feedback, User)
+            .join(User, User.id == Feedback.author_id)
+            .where(Feedback.submission_id == submission.id)
+            .order_by(Feedback.created_at.asc(), Feedback.id.asc())
+        )
+        history.append((submission, list(feedback_result.all())))
+    return assignment, recipient, history
