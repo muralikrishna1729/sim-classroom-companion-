@@ -18,6 +18,7 @@ from app.db.models import (
     MembershipStatus,
     RecipientStatus,
     Submission,
+    User,
 )
 from app.domains.assignments import DomainRuleViolation
 
