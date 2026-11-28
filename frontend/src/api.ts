@@ -44,7 +44,7 @@ export const assignmentApi = {
     return (await api.get<Assignment[]>("/assignments", { params: classroomId ? { classroom_id: classroomId } : {} })).data;
   },
   async create(payload: {
-    classroom_id: string; title: string; instructions: string; target_type: "CLASS";
+    classroom_id: string; title: string; instructions: string; target_type: "class";
     timezone: string; due_at: string | null;
   }) { return (await api.post("/assignments", payload)).data; },
   async progress(assignmentId: string) {
