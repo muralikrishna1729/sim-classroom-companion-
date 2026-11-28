@@ -66,3 +66,34 @@ class StudentSubmissionFeedbackResponse(BaseModel):
     submission_id: UUID
     recipient_status: RecipientStatus
     feedback: list[StudentFeedbackItem]
+
+
+class StudentAssignmentHistoryFeedback(BaseModel):
+    feedback_id: UUID
+    author_id: UUID
+    author_name: str
+    feedback_text: str
+    created_at: datetime
+
+
+class StudentAssignmentHistoryAttempt(BaseModel):
+    submission_id: UUID
+    submitted_at: datetime
+    text_content: str | None
+    file_name: str | None
+    mime_type: str | None
+    file_size_bytes: int | None
+    feedback: list[StudentAssignmentHistoryFeedback]
+
+
+class StudentAssignmentHistoryResponse(BaseModel):
+    assignment_id: UUID
+    assignment_title: str
+    assignment_instructions: str
+    assignment_status: str
+    due_at: datetime | None
+    timezone: str
+    recipient_id: UUID
+    recipient_status: RecipientStatus
+    blocked_reason: str | None
+    attempts: list[StudentAssignmentHistoryAttempt]
