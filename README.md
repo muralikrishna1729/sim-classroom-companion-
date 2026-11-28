@@ -83,3 +83,45 @@ Never commit `backend/.env`, Telegram bot tokens, Groq API keys, database passwo
 ## Project documentation
 
 See [Architecture](docs/ARCHITECTURE.md), [Decision log](docs/DECISIONS.md), and [Implementation plan](docs/IMPLEMENTATION_PLAN.md).
+
+## Frontend demo
+
+The React + TypeScript frontend lives in `frontend/`.
+
+### Run locally (Windows PowerShell)
+
+1. Pull the demo branch:
+
+   ```powershell
+   git pull --ff-only origin feature/frontend-demo
+   ```
+
+2. In a new terminal, install and start the frontend:
+
+   ```powershell
+   cd frontend
+   npm install
+   Copy-Item .env.example .env
+   npm run dev
+   ```
+
+3. Keep the FastAPI backend running in another terminal:
+
+   ```powershell
+   $env:PYTHONPATH = "backend"
+   uvicorn app.main:app --app-dir backend --reload
+   ```
+
+4. Open `http://localhost:5173`.
+
+The frontend calls the existing API at `http://localhost:8000/api/v1` by default. Override it with `VITE_API_BASE_URL` in `frontend/.env` if needed.
+
+### Current demo scope
+
+- Login and registration using the existing JWT endpoints.
+- Classroom, assignment, and notification data loaded from the API.
+- Teacher dashboard, classroom list, and class-wide assignment creation.
+- Student-facing assignment overview and progress-ready UI.
+- Responsive layout for desktop and mobile.
+
+The teacher/student switch changes the visible workspace only; backend authorization remains authoritative. Use accounts with the corresponding classroom memberships to exercise teacher and student actions. Submission upload/review screens and Telegram account linking are subsequent iterations.
