@@ -327,7 +327,7 @@ async def list_user_assignments(
             ),
         )
         .where(
-            Assignment.status == AssignmentStatus.ASSIGNED,
+            Assignment.status.in_([AssignmentStatus.ASSIGNED, AssignmentStatus.CANCELLED]),
             or_(teacher_access, coordinator_access, student_access),
         )
         .order_by(Assignment.created_at.desc(), Assignment.id)
