@@ -177,3 +177,33 @@ def test_review_rejects_blank_feedback():
         await engine.dispose()
 
     asyncio.run(scenario())
+
+
+def test_teacher_can_request_revision_with_written_feedback():
+    async def scenario():
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+
+        async with sessions() as session:
+            teacher_id, recipient_id, submission_id = await _seed_review_case(session)
+            await session.commit()
+
+            _, feedback, recipient = await review_submission(
+                session,
+                submission_id=submission_id,
+                actor_user_id=teacher_id,
+                feedback_text="Please show your calculation steps.",
+                decision=RecipientStatus.NEEDS_REVISION,
+            )
+            await session.commit()
+
+            assert feedback.feedback_text == "Please show your calculation steps."
+            assert recipient.id == recipient_id
+            assert recipient.status == RecipientStatus.NEEDS_REVISION
+            assert recipient.completed_at is None
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
