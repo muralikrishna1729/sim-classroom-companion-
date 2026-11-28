@@ -77,6 +77,39 @@ async def create_assignment_endpoint(
     )
 
 
+@router.get("", response_model=list[AssignmentListItem])
+async def get_assignments(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    classroom_id: UUID | None = None,
+) -> list[AssignmentListItem]:
+    """List assignments visible to the user, optionally scoped to a classroom."""
+    rows = await list_user_assignments(
+        db,
+        user_id=current_user.id,
+        classroom_id=classroom_id,
+    )
+    items: list[AssignmentListItem] = []
+    for assignment, recipient in rows:
+        items.append(
+            AssignmentListItem(
+                id=assignment.id,
+                classroom_id=assignment.classroom_id,
+                created_by_id=assignment.created_by_id,
+                title=assignment.title,
+                instructions=assignment.instructions,
+                target_type=assignment.target_type,
+                status=assignment.status.value,
+                due_at=assignment.due_at,
+                timezone=assignment.timezone,
+                recipient_id=recipient.id if recipient is not None else None,
+                my_status=recipient.status if recipient is not None else None,
+                my_blocked_reason=recipient.blocked_reason if recipient is not None else None,
+            )
+        )
+    return items
+
+
 @router.patch(
     "/recipients/{recipient_id}/progress",
     response_model=RecipientProgressResponse,
