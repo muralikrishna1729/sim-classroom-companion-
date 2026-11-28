@@ -185,3 +185,70 @@ def test_invalid_progress_transition_is_rejected(client, student, monkeypatch):
     )
 
     assert response.status_code == 403
+
+
+def test_assignment_listing_requires_authentication(client):
+    response = client.get("/api/v1/assignments")
+    assert response.status_code == 401
+
+
+def test_assignment_listing_returns_only_requesting_students_progress(client, student, monkeypatch):
+    authenticate_as(student)
+    assignment = SimpleNamespace(
+        id=uuid4(),
+        classroom_id=uuid4(),
+        created_by_id=uuid4(),
+        title="Science project",
+        instructions="Prepare a short report.",
+        target_type=AssignmentTargetType.INDIVIDUAL,
+        status=AssignmentStatus.ASSIGNED,
+        due_at=None,
+        timezone="Asia/Kolkata",
+    )
+    recipient = SimpleNamespace(
+        id=uuid4(),
+        status=RecipientStatus.IN_PROGRESS,
+        blocked_reason=None,
+    )
+    captured = {}
+
+    async def listing(db, **kwargs):
+        captured.update(kwargs)
+        return [(assignment, recipient)]
+
+    monkeypatch.setattr("app.api.assignments.list_user_assignments", listing)
+    response = client.get(f"/api/v1/assignments?classroom_id={assignment.classroom_id}")
+
+    assert response.status_code == 200
+    assert captured["user_id"] == student.id
+    assert captured["classroom_id"] == assignment.classroom_id
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == str(assignment.id)
+    assert data[0]["recipient_id"] == str(recipient.id)
+    assert data[0]["my_status"] == "in_progress"
+
+
+def test_teacher_assignment_listing_does_not_expose_student_progress(client, student, monkeypatch):
+    authenticate_as(student)
+    assignment = SimpleNamespace(
+        id=uuid4(),
+        classroom_id=uuid4(),
+        created_by_id=student.id,
+        title="Class assignment",
+        instructions="Read chapter 1.",
+        target_type=AssignmentTargetType.CLASS,
+        status=AssignmentStatus.ASSIGNED,
+        due_at=None,
+        timezone="Asia/Kolkata",
+    )
+
+    async def listing(db, **kwargs):
+        return [(assignment, None)]
+
+    monkeypatch.setattr("app.api.assignments.list_user_assignments", listing)
+    response = client.get("/api/v1/assignments")
+
+    assert response.status_code == 200
+    assert response.json()[0]["recipient_id"] is None
+    assert response.json()[0]["my_status"] is None
