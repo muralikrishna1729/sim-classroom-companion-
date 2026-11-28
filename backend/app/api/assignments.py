@@ -15,6 +15,8 @@ from app.domains.assignments import (
     create_assignment,
     list_user_assignments,
     transition_recipient_status,
+    get_teacher_assignment_progress,
+    cancel_assignment,
 )
 from app.schemas.assignment import (
     AssignmentCreateRequest,
@@ -22,6 +24,9 @@ from app.schemas.assignment import (
     AssignmentResponse,
     RecipientProgressRequest,
     RecipientProgressResponse,
+    TeacherAssignmentProgressResponse,
+    TeacherAssignmentRecipientProgress,
+    AssignmentCancellationResponse,
 )
 
 router = APIRouter(prefix="/assignments", tags=["Assignments"])
@@ -149,4 +154,77 @@ async def update_assignment_progress(
         student_id=recipient.student_id,
         status=recipient.status,
         blocked_reason=recipient.blocked_reason,
+    )
+
+
+@router.get("/{assignment_id}/progress", response_model=TeacherAssignmentProgressResponse)
+async def get_assignment_progress(
+    assignment_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TeacherAssignmentProgressResponse:
+    """Return recipient-by-recipient progress to an active classroom teacher."""
+    try:
+        assignment, recipients, names = await get_teacher_assignment_progress(
+            db,
+            assignment_id=assignment_id,
+            actor_user_id=current_user.id,
+        )
+    except DomainRuleViolation as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from None
+
+    counts: dict[str, int] = {}
+    items = []
+    for recipient in recipients:
+        key = recipient.status.value
+        counts[key] = counts.get(key, 0) + 1
+        items.append(
+            TeacherAssignmentRecipientProgress(
+                recipient_id=recipient.id,
+                student_id=recipient.student_id,
+                student_name=names[recipient.id],
+                status=recipient.status,
+                blocked_reason=recipient.blocked_reason,
+                acknowledged_at=recipient.acknowledged_at,
+                submitted_at=recipient.submitted_at,
+                completed_at=recipient.completed_at,
+            )
+        )
+    return TeacherAssignmentProgressResponse(
+        assignment_id=assignment.id,
+        assignment_status=assignment.status.value,
+        total_recipients=len(recipients),
+        status_counts=counts,
+        recipients=items,
+    )
+
+
+@router.post("/{assignment_id}/cancel", response_model=AssignmentCancellationResponse)
+async def cancel_assignment_endpoint(
+    assignment_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AssignmentCancellationResponse:
+    """Cancel an assignment while retaining all recipient and submission history."""
+    try:
+        assignment = await cancel_assignment(
+            db,
+            assignment_id=assignment_id,
+            actor_user_id=current_user.id,
+        )
+        await db.commit()
+        await db.refresh(assignment)
+    except DomainRuleViolation as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from None
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The assignment could not be cancelled.",
+        ) from None
+
+    return AssignmentCancellationResponse(
+        assignment_id=assignment.id,
+        status=assignment.status.value,
     )
