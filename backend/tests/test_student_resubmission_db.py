@@ -22,7 +22,8 @@ from app.db.models import (
     Submission,
     User,
 )
-from app.domains.reviews import review_submission
+from app.domains.assignments import DomainRuleViolation
+from app.domains.reviews import list_classroom_submissions, review_submission
 from app.domains.submissions import create_submission
 
 
@@ -140,6 +141,32 @@ def test_student_can_resubmit_after_revision_and_history_is_preserved():
             assert saved_feedback.feedback_text == (
                 "Please explain condensation in more detail."
             )
+
+            # Teachers see every attempt, with a clear latest-attempt marker.
+            teacher_rows = await list_classroom_submissions(
+                session,
+                classroom_id=classroom.id,
+                actor_user_id=teacher.id,
+            )
+            assert len(teacher_rows) == 2
+            latest_row = next(row for row in teacher_rows if row[0].id == second_submission.id)
+            previous_row = next(row for row in teacher_rows if row[0].id == first_submission.id)
+            assert latest_row[5:] == (2, 2)
+            assert previous_row[5:] == (1, 2)
+
+            # An older attempt cannot accidentally be reviewed after resubmission.
+            with pytest.raises(
+                DomainRuleViolation,
+                match="Only the latest submission attempt can be reviewed",
+            ):
+                await review_submission(
+                    session,
+                    submission_id=first_submission.id,
+                    actor_user_id=teacher.id,
+                    feedback_text="Reviewing the wrong attempt.",
+                    decision=RecipientStatus.COMPLETED,
+                )
+            await session.rollback()
 
         await engine.dispose()
 
