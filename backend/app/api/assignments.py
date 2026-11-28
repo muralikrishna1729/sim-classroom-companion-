@@ -13,10 +13,12 @@ from app.dependencies.auth import get_current_user
 from app.domains.assignments import (
     DomainRuleViolation,
     create_assignment,
+    list_user_assignments,
     transition_recipient_status,
 )
 from app.schemas.assignment import (
     AssignmentCreateRequest,
+    AssignmentListItem,
     AssignmentResponse,
     RecipientProgressRequest,
     RecipientProgressResponse,
