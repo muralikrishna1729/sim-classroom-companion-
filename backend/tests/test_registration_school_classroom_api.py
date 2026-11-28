@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db.models import ClassRole, MembershipStatus, SchoolRole, User
+from app.db.models import ClassRole, MembershipStatus, User
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.domains import classrooms as classroom_domain
@@ -68,7 +68,7 @@ def test_registration_returns_user_and_access_token(client, monkeypatch):
         password_hash="hashed",
         is_active=True,
     )
-    monkeypatch.setattr(registration_domain, "register_user", _async_return(user))
+    monkeypatch.setattr("app.api.auth.register_user", _async_return(user))
     monkeypatch.setattr("app.api.auth.create_access_token", lambda subject: "test-token")
 
     response = client.post(
@@ -98,7 +98,7 @@ def test_registration_rejects_duplicate_email(client, monkeypatch):
             "An account with this email already exists."
         )
 
-    monkeypatch.setattr(registration_domain, "register_user", duplicate)
+    monkeypatch.setattr("app.api.auth.register_user", duplicate)
     response = client.post(
         "/api/v1/auth/register",
         json={
@@ -140,7 +140,7 @@ def test_coordinator_can_create_school(client, current_user, monkeypatch):
         timezone="Asia/Kolkata",
         is_active=True,
     )
-    monkeypatch.setattr(school_domain, "create_school", _async_return(school))
+    monkeypatch.setattr("app.api.schools.create_school", _async_return(school))
 
     response = client.post(
         "/api/v1/schools",
@@ -166,7 +166,7 @@ def test_school_list_returns_only_domain_service_results(
         timezone="Asia/Kolkata",
         is_active=True,
     )
-    monkeypatch.setattr(school_domain, "list_user_schools", _async_return([school]))
+    monkeypatch.setattr("app.api.schools.list_user_schools", _async_return([school]))
 
     response = client.get("/api/v1/schools/me")
 
@@ -198,7 +198,7 @@ def test_coordinator_can_create_classroom(client, current_user, monkeypatch):
         grade_label="Grade 10",
     )
     monkeypatch.setattr(
-        classroom_domain, "create_classroom", _async_return(classroom)
+        "app.api.classrooms.create_classroom", _async_return(classroom)
     )
 
     response = client.post(
@@ -229,7 +229,7 @@ def test_classroom_access_rule_violation_is_forbidden(
             "An active coordinator membership is required for this school."
         )
 
-    monkeypatch.setattr(classroom_domain, "create_classroom", denied)
+    monkeypatch.setattr("app.api.classrooms.create_classroom", denied)
     response = client.post(
         "/api/v1/classrooms",
         json={"school_id": str(uuid4()), "name": "Class 10-A"},
@@ -258,7 +258,7 @@ def test_classroom_member_endpoint_uses_authenticated_actor(
         assert kwargs["role"] == ClassRole.STUDENT
         return membership
 
-    monkeypatch.setattr(classroom_domain, "add_classroom_member", add_member)
+    monkeypatch.setattr("app.api.classrooms.add_classroom_member", add_member)
 
     response = client.post(
         f"/api/v1/classrooms/{classroom_id}/students",
