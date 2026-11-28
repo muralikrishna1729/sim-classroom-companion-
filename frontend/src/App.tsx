@@ -10,6 +10,19 @@ import { assignmentApi, authApi, classroomApi, notificationApi, type Assignment,
 type Role = "teacher" | "student";
 type Notice = { kind: "success" | "error"; text: string };
 
+function getApiErrorMessage(error: any, fallback: string): string {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((item: any) => {
+      const location = Array.isArray(item?.loc) ? item.loc.filter((part: unknown) => part !== "body").join(" → ") : "";
+      const message = typeof item?.msg === "string" ? item.msg : "Invalid value";
+      return location ? location + ": " + message : message;
+    }).join("; ");
+  }
+  return fallback;
+}
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<Role>("teacher");
@@ -39,7 +52,7 @@ function App() {
     } catch (error: any) {
       if (error?.response?.status === 401) {
         authApi.logout(); setUser(null);
-      } else setNotice({ kind: "error", text: error?.response?.data?.detail || "Couldn't load your classroom data." });
+      } else setNotice({ kind: "error", text: getApiErrorMessage(error, "Couldn't load your classroom data.") });
     } finally { setLoading(false); }
   };
 
@@ -60,7 +73,7 @@ function App() {
       setUser(await authApi.me());
       setNotice({ kind: "success", text: "Welcome to Classroom Companion." });
     } catch (error: any) {
-      setNotice({ kind: "error", text: error?.response?.data?.detail || "Authentication failed. Check your details and try again." });
+      setNotice({ kind: "error", text: getApiErrorMessage(error, "Authentication failed. Check your details and try again.") });
     } finally { setLoading(false); }
   };
 
@@ -117,7 +130,7 @@ function CreateAssignment({classrooms,close,created,error}:{classrooms:Classroom
   const [classroom,setClassroom]=useState(classrooms[0]?.id||"");
   const [title,setTitle]=useState(""); const [instructions,setInstructions]=useState("");
   const [due,setDue]=useState(""); const [saving,setSaving]=useState(false);
-  const submit=async(e:React.FormEvent)=>{e.preventDefault();if(!classroom){error("Create or join a classroom before assigning work.");return;}setSaving(true);try{await assignmentApi.create({classroom_id:classroom,title,instructions,target_type:"CLASS",timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,due_at:due?new Date(due).toISOString():null});created();}catch(err:any){error(err?.response?.data?.detail||"Couldn't create the assignment.");}finally{setSaving(false);}};
+  const submit=async(e:React.FormEvent)=>{e.preventDefault();if(!classroom){error("Create or join a classroom before assigning work.");return;}setSaving(true);try{await assignmentApi.create({classroom_id:classroom,title,instructions,target_type:"class",timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,due_at:due?new Date(due).toISOString():null});created();}catch(err:any){error(getApiErrorMessage(err, "Couldn't create the assignment."));}finally{setSaving(false);}};
   return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)close();}}><form className="modal" onSubmit={submit}><div className="modal-head"><div><div className="eyebrow">NEW CLASSROOM TASK</div><h2>Create assignment</h2><p>Share clear instructions and a deadline.</p></div><button type="button" className="icon-button" onClick={close}><X size={19}/></button></div><label>Classroom<select required value={classroom} onChange={e=>setClassroom(e.target.value)}><option value="">Select classroom</option>{classrooms.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Assignment title<input required minLength={2} value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Science project: our solar system"/></label><label>Instructions<textarea required rows={4} value={instructions} onChange={e=>setInstructions(e.target.value)} placeholder="Explain what students need to complete…"/></label><label>Due date and time<input type="datetime-local" value={due} onChange={e=>setDue(e.target.value)}/></label><div className="modal-actions"><button type="button" className="secondary-button" onClick={close}>Cancel</button><button className="primary-button" disabled={saving}>{saving?"Creating…":<><Send size={15}/> Create assignment</>}</button></div></form></div>;
 }
 
