@@ -102,10 +102,21 @@ async def get_classroom_submissions(
             recipient_status=recipient.status,
             submitted_at=recipient.submitted_at,
             submission_created_at=submission.created_at,
+            attempt_number=attempt_number,
+            total_attempts=total_attempts,
+            is_latest_attempt=attempt_number == total_attempts,
             text_content=submission.text_content,
             file_name=submission.file_name,
             mime_type=submission.mime_type,
             file_size_bytes=submission.file_size_bytes,
         )
-        for submission, recipient, assignment, student_id, student_name in rows
+        for (
+            submission,
+            recipient,
+            assignment,
+            student_id,
+            student_name,
+            attempt_number,
+            total_attempts,
+        ) in rows
     ]
