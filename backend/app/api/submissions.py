@@ -9,11 +9,13 @@ from app.db.models import User
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.domains.assignments import DomainRuleViolation
-from app.domains.submissions import create_submission
+from app.domains.submissions import create_submission, get_student_submission_feedback
 from app.schemas.assignment import SubmissionResponse
+from app.schemas.review import StudentFeedbackItem, StudentSubmissionFeedbackResponse
 from app.storage.local import save_submission_file, delete_submission_file
 
 router = APIRouter(prefix="/assignments", tags=["Submissions"])
+feedback_router = APIRouter(prefix="/submissions", tags=["Student Feedback"])
 
 
 @router.post(
@@ -105,4 +107,41 @@ async def submit_assignment(
         file_name=submission.file_name,
         mime_type=submission.mime_type,
         file_size_bytes=submission.file_size_bytes,
+    )
+
+@feedback_router.get(
+    "/{submission_id}/feedback",
+    response_model=StudentSubmissionFeedbackResponse,
+)
+async def get_submission_feedback(
+    submission_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> StudentSubmissionFeedbackResponse:
+    """Let a student view feedback on their own submission only."""
+    try:
+        submission, recipient, feedback_rows = await get_student_submission_feedback(
+            db,
+            submission_id=submission_id,
+            actor_user_id=current_user.id,
+        )
+    except DomainRuleViolation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Submission not found.",
+        ) from None
+
+    return StudentSubmissionFeedbackResponse(
+        submission_id=submission.id,
+        recipient_status=recipient.status,
+        feedback=[
+            StudentFeedbackItem(
+                feedback_id=feedback.id,
+                author_id=feedback.author_id,
+                author_name=author.full_name,
+                feedback_text=feedback.feedback_text,
+                created_at=feedback.created_at,
+            )
+            for feedback, author in feedback_rows
+        ],
     )
