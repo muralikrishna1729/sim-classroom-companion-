@@ -172,7 +172,7 @@ function SchoolSetup({user,schools,classrooms,refresh,notify}:{user:User;schools
 }
 
 function AssignmentRow({item}:{item:Assignment}) {
-  const status = (item.my_status || item.status || "assigned").replaceAll("_"," ");
+  const status = (item.my_status || item.status || "assigned").replace(/_/g, " ");
   const tone = ["completed","submitted"].includes(status.toLowerCase()) ? "green" : status.toLowerCase()==="blocked" ? "red" : "amber";
   return <div className="assignment-row"><div className="assignment-symbol"><BookOpen size={18}/></div><div className="assignment-info"><strong>{item.title}</strong><small>{item.instructions}</small></div><span className={`status-pill ${tone}`}>{status}</span><div className="due-date"><CalendarDays size={14}/>{item.due_at ? new Date(item.due_at).toLocaleDateString() : "No due date"}</div></div>;
 }
