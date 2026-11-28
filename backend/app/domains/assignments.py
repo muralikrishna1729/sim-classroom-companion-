@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -267,3 +267,70 @@ async def transition_recipient_status(
 
     await session.flush()
     return recipient
+
+
+async def list_user_assignments(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    classroom_id: UUID | None = None,
+) -> list[tuple[Assignment, AssignmentRecipient | None]]:
+    """List assignments visible to a user, with only their own student progress.
+
+    Active teachers see assignments in their classrooms. Active school
+    coordinators see assignments across their active schools. Students see
+    only assignments for which they have a recipient row and active classroom
+    membership. A student never receives another student's progress data.
+    """
+    teacher_access = exists(
+        select(ClassMembership.id).where(
+            ClassMembership.classroom_id == Assignment.classroom_id,
+            ClassMembership.user_id == user_id,
+            ClassMembership.role == ClassRole.TEACHER,
+            ClassMembership.status == MembershipStatus.ACTIVE,
+        )
+    )
+    coordinator_access = exists(
+        select(SchoolMembership.id)
+        .join(School, School.id == SchoolMembership.school_id)
+        .join(Classroom, Classroom.school_id == School.id)
+        .where(
+            Classroom.id == Assignment.classroom_id,
+            SchoolMembership.user_id == user_id,
+            SchoolMembership.role == SchoolRole.COORDINATOR,
+            SchoolMembership.status == MembershipStatus.ACTIVE,
+            School.is_active.is_(True),
+        )
+    )
+    student_access = and_(
+        AssignmentRecipient.student_id == user_id,
+        exists(
+            select(ClassMembership.id).where(
+                ClassMembership.classroom_id == Assignment.classroom_id,
+                ClassMembership.user_id == user_id,
+                ClassMembership.role == ClassRole.STUDENT,
+                ClassMembership.status == MembershipStatus.ACTIVE,
+            )
+        ),
+    )
+
+    query = (
+        select(Assignment, AssignmentRecipient)
+        .outerjoin(
+            AssignmentRecipient,
+            and_(
+                AssignmentRecipient.assignment_id == Assignment.id,
+                AssignmentRecipient.student_id == user_id,
+            ),
+        )
+        .where(
+            Assignment.status == AssignmentStatus.ASSIGNED,
+            or_(teacher_access, coordinator_access, student_access),
+        )
+        .order_by(Assignment.created_at.desc(), Assignment.id)
+    )
+    if classroom_id is not None:
+        query = query.where(Assignment.classroom_id == classroom_id)
+
+    result = await session.execute(query)
+    return list(result.all())
