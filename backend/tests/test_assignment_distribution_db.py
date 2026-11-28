@@ -10,6 +10,7 @@ from app.db.base import Base
 from app.db.models import (
     Assignment,
     AssignmentRecipient,
+    AssignmentStatus,
     AssignmentTargetType,
     ClassMembership,
     ClassRole,
@@ -21,7 +22,7 @@ from app.db.models import (
     StudentGroupMembership,
     User,
 )
-from app.domains.assignments import DomainRuleViolation, create_assignment
+from app.domains.assignments import (\n    DomainRuleViolation,\n    create_assignment,\n    get_teacher_assignment_progress,\n    cancel_assignment,\n)
 
 
 async def seed_classroom(session):
@@ -287,5 +288,95 @@ def test_assignment_rejects_timezone_that_does_not_match_school():
             )
         await session.rollback()
         assert await session.scalar(select(Assignment.id)) is None
+
+    run_test(scenario)
+
+
+
+def test_teacher_can_view_recipient_wise_assignment_progress():
+    async def scenario(session):
+        _, teacher, students, classroom, _ = await seed_classroom(session)
+        assignment = await create_assignment(
+            session,
+            actor_user_id=teacher.id,
+            classroom_id=classroom.id,
+            title="Progress task",
+            instructions="Complete the task.",
+            target_type=AssignmentTargetType.CLASS,
+            timezone_name="Asia/Kolkata",
+        )
+        assignment, recipients, names = await get_teacher_assignment_progress(
+            session, assignment_id=assignment.id, actor_user_id=teacher.id
+        )
+        assert assignment.id
+        assert len(recipients) == 3
+        assert {row.student_id for row in recipients} == {row.id for row in students[:3]}
+        assert {names[row.id] for row in recipients} == {row.full_name for row in students[:3]}
+
+    run_test(scenario)
+
+
+def test_non_teacher_cannot_view_assignment_progress():
+    async def scenario(session):
+        _, _, students, classroom, _ = await seed_classroom(session)
+        # Create an assignment using a valid teacher, then attempt access as a student.
+        teacher_id = await session.scalar(
+            select(ClassMembership.user_id).where(
+                ClassMembership.classroom_id == classroom.id,
+                ClassMembership.role == ClassRole.TEACHER,
+            )
+        )
+        assignment = await create_assignment(
+            session,
+            actor_user_id=teacher_id,
+            classroom_id=classroom.id,
+            title="Private progress",
+            instructions="Teacher-only progress.",
+            target_type=AssignmentTargetType.CLASS,
+            timezone_name="Asia/Kolkata",
+        )
+        with pytest.raises(DomainRuleViolation, match="active teacher membership"):
+            await get_teacher_assignment_progress(
+                session, assignment_id=assignment.id, actor_user_id=students[0].id
+            )
+
+    run_test(scenario)
+
+
+def test_cancelling_assignment_preserves_recipient_history_and_blocks_repeat_cancel():
+    async def scenario(session):
+        _, teacher, _, classroom, _ = await seed_classroom(session)
+        assignment = await create_assignment(
+            session,
+            actor_user_id=teacher.id,
+            classroom_id=classroom.id,
+            title="Cancel safely",
+            instructions="History must remain.",
+            target_type=AssignmentTargetType.CLASS,
+            timezone_name="Asia/Kolkata",
+        )
+        before = list(
+            (await session.scalars(
+                select(AssignmentRecipient).where(
+                    AssignmentRecipient.assignment_id == assignment.id
+                )
+            )).all()
+        )
+        cancelled = await cancel_assignment(
+            session, assignment_id=assignment.id, actor_user_id=teacher.id
+        )
+        after = list(
+            (await session.scalars(
+                select(AssignmentRecipient).where(
+                    AssignmentRecipient.assignment_id == assignment.id
+                )
+            )).all()
+        )
+        assert cancelled.status == AssignmentStatus.CANCELLED
+        assert {row.id for row in after} == {row.id for row in before}
+        with pytest.raises(DomainRuleViolation, match="not currently assigned"):
+            await cancel_assignment(
+                session, assignment_id=assignment.id, actor_user_id=teacher.id
+            )
 
     run_test(scenario)
