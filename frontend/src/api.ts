@@ -13,6 +13,7 @@ api.interceptors.request.use((config) => {
 
 export type User = { id: string; full_name: string; email: string };
 export type Classroom = { id: string; school_id: string; name: string; grade_label?: string | null };
+export type School = { id: string; name: string; timezone: string; is_active: boolean };
 export type Assignment = {
   id: string; classroom_id: string; title: string; instructions: string;
   status: string; due_at: string | null; timezone: string;
@@ -35,8 +36,16 @@ export const authApi = {
   logout() { localStorage.removeItem("sim_access_token"); },
 };
 
+export const schoolApi = {
+  async list() { return (await api.get<School[]>("/schools/me")).data; },
+  async create(payload: { name: string; timezone: string }) { return (await api.post<School>("/schools", payload)).data; },
+};
+
 export const classroomApi = {
   async list() { return (await api.get<Classroom[]>("/classrooms")).data; },
+  async create(payload: { school_id: string; name: string; grade_label?: string | null }) { return (await api.post<Classroom>("/classrooms", payload)).data; },
+  async addTeacher(classroomId: string, userId: string) { return (await api.post(`/classrooms/${classroomId}/teachers`, { user_id: userId })).data; },
+  async addStudent(classroomId: string, userId: string) { return (await api.post(`/classrooms/${classroomId}/students`, { user_id: userId })).data; },
 };
 
 export const assignmentApi = {
