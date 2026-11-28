@@ -242,8 +242,8 @@ async def process_due_reminders(
 
         due_label = due_at.isoformat() if due_at else "the assigned deadline"
         message = (
-            f"Assignment reminder: {assignment_title}\\n"
-            f"Hi {student_name}, please remember to submit your assignment.\\n"
+            f"Assignment reminder: {assignment_title}\n"
+            f"Hi {student_name}, please remember to submit your assignment.\n"
             f"Due: {due_label}"
         )
         try:
