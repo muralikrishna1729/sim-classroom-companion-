@@ -10,10 +10,11 @@ from app.db.models import RecipientStatus, User
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.domains.assignments import DomainRuleViolation
-from app.domains.reviews import review_submission
+from app.domains.reviews import list_classroom_submissions, review_submission
 from app.schemas.review import (
     ReviewSubmissionRequest,
     ReviewSubmissionResponse,
+    TeacherSubmissionListItem,
 )
 
 router = APIRouter(prefix="/reviews", tags=["Teacher Reviews"])
@@ -63,3 +64,47 @@ async def review_submission_endpoint(
         recipient_status=recipient.status,
         completed_at=recipient.completed_at,
     )
+
+
+@router.get(
+    "/classrooms/{classroom_id}/submissions",
+    response_model=list[TeacherSubmissionListItem],
+)
+async def get_classroom_submissions(
+    classroom_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[TeacherSubmissionListItem]:
+    """List submitted work for a classroom the current teacher belongs to."""
+    try:
+        rows = await list_classroom_submissions(
+            db,
+            classroom_id=classroom_id,
+            actor_user_id=current_user.id,
+        )
+    except DomainRuleViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from None
+
+    return [
+        TeacherSubmissionListItem(
+            submission_id=submission.id,
+            assignment_id=assignment.id,
+            assignment_title=assignment.title,
+            assignment_instructions=assignment.instructions,
+            due_at=assignment.due_at,
+            recipient_id=recipient.id,
+            student_id=student_id,
+            student_name=student_name,
+            recipient_status=recipient.status,
+            submitted_at=recipient.submitted_at,
+            submission_created_at=submission.created_at,
+            text_content=submission.text_content,
+            file_name=submission.file_name,
+            mime_type=submission.mime_type,
+            file_size_bytes=submission.file_size_bytes,
+        )
+        for submission, recipient, assignment, student_id, student_name in rows
+    ]
