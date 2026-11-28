@@ -45,6 +45,9 @@ class TeacherSubmissionListItem(BaseModel):
     recipient_status: RecipientStatus
     submitted_at: datetime | None
     submission_created_at: datetime
+    attempt_number: int
+    total_attempts: int
+    is_latest_attempt: bool
     text_content: str | None
     file_name: str | None
     mime_type: str | None
