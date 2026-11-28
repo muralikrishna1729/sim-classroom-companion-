@@ -64,12 +64,6 @@ def authenticate_as(user):
     app.dependency_overrides[get_current_user] = lambda: user
 
 
-def _async_return(value):
-    async def result(*args, **kwargs):
-        return value
-    return result
-
-
 def test_assignment_creation_requires_authentication(client):
     response = client.post(
         "/api/v1/assignments",
@@ -82,6 +76,30 @@ def test_assignment_creation_requires_authentication(client):
         },
     )
     assert response.status_code == 401
+
+
+def test_assignment_title_must_have_two_non_whitespace_characters(client, student):
+    authenticate_as(student)
+    response = client.post(
+        "/api/v1/assignments",
+        json={
+            "classroom_id": str(uuid4()),
+            "title": " x ",
+            "instructions": "Complete questions 1 to 5.",
+            "target_type": "class",
+            "timezone": "Asia/Kolkata",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_student_cannot_request_teacher_or_system_progress_status(client, student):
+    authenticate_as(student)
+    response = client.patch(
+        f"/api/v1/assignments/recipients/{uuid4()}/progress",
+        json={"status": "completed"},
+    )
+    assert response.status_code == 422
 
 
 def test_teacher_can_create_class_assignment(client, student, monkeypatch):
