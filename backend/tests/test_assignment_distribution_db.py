@@ -412,6 +412,7 @@ def test_cancelled_assignment_remains_visible_but_rejects_student_writes():
         await cancel_assignment(
             session, assignment_id=assignment.id, actor_user_id=teacher.id
         )
+        await session.commit()
         visible = await list_user_assignments(
             session, user_id=students[0].id, classroom_id=classroom.id
         )
