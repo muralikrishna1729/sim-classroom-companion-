@@ -252,3 +252,50 @@ def test_teacher_assignment_listing_does_not_expose_student_progress(client, stu
     assert response.status_code == 200
     assert response.json()[0]["recipient_id"] is None
     assert response.json()[0]["my_status"] is None
+
+
+@pytest.mark.parametrize(
+    ("target_type", "target_field"),
+    [
+        ("individual", "student_ids"),
+        ("group", "group_ids"),
+    ],
+)
+def test_teacher_can_create_targeted_assignment(
+    client, student, monkeypatch, target_type, target_field
+):
+    authenticate_as(student)
+    classroom_id = uuid4()
+    target_ids = [uuid4(), uuid4()]
+    assignment = SimpleNamespace(
+        id=uuid4(),
+        classroom_id=classroom_id,
+        created_by_id=student.id,
+        title="Targeted assignment",
+        instructions="Complete the assigned task.",
+        target_type=AssignmentTargetType(target_type),
+        status=AssignmentStatus.ASSIGNED,
+        due_at=None,
+        timezone="Asia/Kolkata",
+    )
+    captured = {}
+
+    async def create(db, **kwargs):
+        captured.update(kwargs)
+        return assignment
+
+    monkeypatch.setattr("app.api.assignments.create_assignment", create)
+    payload = {
+        "classroom_id": str(classroom_id),
+        "title": "Targeted assignment",
+        "instructions": "Complete the assigned task.",
+        "target_type": target_type,
+        "timezone": "Asia/Kolkata",
+        target_field: [str(value) for value in target_ids],
+    }
+    response = client.post("/api/v1/assignments", json=payload)
+
+    assert response.status_code == 201
+    assert captured[target_field] == target_ids
+    assert captured["target_type"] == AssignmentTargetType(target_type)
+    assert response.json()["target_type"] == target_type
