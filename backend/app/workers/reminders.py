@@ -73,6 +73,7 @@ async def _recover_stale_processing_reminders(
                 Reminder.status == ReminderStatus.PROCESSING,
                 Reminder.scheduled_at <= cutoff,
             )
+            .with_for_update(skip_locked=True, of=Reminder)
         )
         stale = list(result.all())
         for reminder in stale:
