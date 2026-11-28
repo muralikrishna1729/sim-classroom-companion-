@@ -110,3 +110,66 @@ def test_student_feedback_endpoint_requires_authentication():
     finally:
         app.dependency_overrides.clear()
         app.dependency_overrides.update(original_overrides)
+
+
+
+def test_student_assignment_history_endpoint_returns_assignment_and_attempts(
+    client, student, monkeypatch
+):
+    recipient_id = uuid4()
+    assignment_id = uuid4()
+    submission_id = uuid4()
+    feedback_id = uuid4()
+    teacher_id = uuid4()
+    now = datetime.now(timezone.utc)
+    assignment = SimpleNamespace(
+        id=assignment_id,
+        title="Water cycle",
+        instructions="Explain evaporation and condensation.",
+        status=SimpleNamespace(value="cancelled"),
+        due_at=now,
+        timezone="Asia/Kolkata",
+    )
+    recipient = SimpleNamespace(
+        id=recipient_id,
+        status=RecipientStatus.NEEDS_REVISION,
+        blocked_reason="Add more detail.",
+    )
+    submission = SimpleNamespace(
+        id=submission_id,
+        created_at=now,
+        text_content="Water evaporates.",
+        file_name=None,
+        mime_type=None,
+        file_size_bytes=None,
+    )
+    feedback = SimpleNamespace(
+        id=feedback_id,
+        author_id=teacher_id,
+        feedback_text="Please explain condensation.",
+        created_at=now,
+    )
+    teacher = SimpleNamespace(id=teacher_id, full_name="Teacher One")
+
+    async def fake_history(db, *, recipient_id, actor_user_id):
+        assert actor_user_id == student.id
+        return assignment, recipient, [(submission, [(feedback, teacher)])]
+
+    monkeypatch.setattr(
+        "app.api.submissions.get_student_assignment_history",
+        fake_history,
+    )
+    response = client.get(
+        f"/api/v1/submissions/recipients/{recipient_id}/history"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["assignment_status"] == "cancelled"
+    assert body["assignment_title"] == "Water cycle"
+    assert body["recipient_status"] == "needs_revision"
+    assert body["attempts"][0]["submission_id"] == str(submission_id)
+    assert body["attempts"][0]["feedback"][0]["author_name"] == "Teacher One"
+    assert body["attempts"][0]["feedback"][0]["feedback_text"] == (
+        "Please explain condensation."
+    )
