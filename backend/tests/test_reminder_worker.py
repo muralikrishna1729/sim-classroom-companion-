@@ -126,3 +126,27 @@ def test_worker_retries_transient_telegram_failures_and_stops_after_three_attemp
         assert reminder.attempt_count == 3
         assert reminder.status == ReminderStatus.FAILED
     run_test(scenario)
+
+
+def test_worker_cancels_reminder_when_assignment_is_cancelled(monkeypatch):
+    async def scenario(sessions):
+        async with sessions() as session:
+            reminder_id = await seed_due_reminder(session)
+            reminder = await session.get(Reminder, reminder_id)
+            from app.db.models import Assignment
+            recipient = await session.get(AssignmentRecipient, reminder.assignment_recipient_id)
+            assignment = await session.get(Assignment, recipient.assignment_id)
+            assignment.status = AssignmentStatus.CANCELLED
+            await session.commit()
+
+        async def unexpected_send(*args, **kwargs):
+            raise AssertionError("Cancelled assignments must not send Telegram reminders")
+
+        monkeypatch.setattr(reminder_worker, "send_telegram_message", unexpected_send)
+        counts = await reminder_worker.process_due_reminders(sessions, bot_token="test-token")
+        async with sessions() as session:
+            reminder = await session.get(Reminder, reminder_id)
+        assert counts["cancelled"] == 1
+        assert reminder.status == ReminderStatus.CANCELLED
+
+    run_test(scenario)
