@@ -21,6 +21,7 @@ from app.db.models import (
 )
 from app.domains.assignments import DomainRuleViolation
 from app.domains.reviews import list_classroom_submissions
+from app.schemas.review import TeacherSubmissionListItem
 
 
 def test_teacher_lists_only_submissions_in_their_classroom():
@@ -97,7 +98,7 @@ def test_teacher_lists_only_submissions_in_their_classroom():
             assert listed_assignment.title == "Math Assignment"
             assert student_id == student.id
             assert student_name == "Student A"
-            assert not hasattr(listed_submission, "storage_path")
+            assert "file_path" not in TeacherSubmissionListItem.model_fields
 
             with pytest.raises(DomainRuleViolation, match="active teacher membership"):
                 await list_classroom_submissions(
