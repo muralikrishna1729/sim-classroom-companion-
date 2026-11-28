@@ -98,3 +98,11 @@ class AssignmentListItem(BaseModel):
     recipient_id: UUID | None = None
     my_status: RecipientStatus | None = None
     my_blocked_reason: str | None = None
+
+class SubmissionResponse(BaseModel):
+    id: UUID
+    assignment_recipient_id: UUID
+    text_content: str | None
+    file_name: str | None
+    mime_type: str | None
+    file_size_bytes: int | None
