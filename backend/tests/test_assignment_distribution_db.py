@@ -242,3 +242,50 @@ def test_teacher_cannot_assign_to_classroom_without_active_teacher_membership():
 
 
     run_test(scenario)
+
+
+def test_group_assignment_rejects_group_from_another_classroom():
+    async def scenario(session):
+        _, teacher, _, classroom, other_classroom = await seed_classroom(session)
+        foreign_group = StudentGroup(
+            classroom_id=other_classroom.id,
+            name="Foreign group",
+        )
+        session.add(foreign_group)
+        await session.flush()
+
+        with pytest.raises(DomainRuleViolation, match="Every selected group"):
+            await create_assignment(
+                session,
+                actor_user_id=teacher.id,
+                classroom_id=classroom.id,
+                title="Invalid group task",
+                instructions="This should not be assigned.",
+                target_type=AssignmentTargetType.GROUP,
+                timezone_name="Asia/Kolkata",
+                group_ids=[foreign_group.id],
+            )
+        await session.rollback()
+        assert await session.scalar(select(Assignment.id)) is None
+        assert await session.scalar(select(AssignmentRecipient.id)) is None
+
+    run_test(scenario)
+
+
+def test_assignment_rejects_timezone_that_does_not_match_school():
+    async def scenario(session):
+        _, teacher, _, classroom, _ = await seed_classroom(session)
+        with pytest.raises(DomainRuleViolation, match="must match the school timezone"):
+            await create_assignment(
+                session,
+                actor_user_id=teacher.id,
+                classroom_id=classroom.id,
+                title="Wrong timezone task",
+                instructions="Use the school's timezone.",
+                target_type=AssignmentTargetType.CLASS,
+                timezone_name="UTC",
+            )
+        await session.rollback()
+        assert await session.scalar(select(Assignment.id)) is None
+
+    run_test(scenario)
