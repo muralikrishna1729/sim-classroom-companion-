@@ -16,8 +16,10 @@ from app.db.models import (
     Assignment,
     AssignmentRecipient,
     AssignmentStatus,
+    Feedback,
     RecipientStatus,
     Submission,
+    User,
 )
 from app.domains.assignments import DomainRuleViolation
 
@@ -81,3 +83,40 @@ async def create_submission(
     session.add(submission)
     await session.flush()
     return submission
+
+
+async def get_student_submission_feedback(
+    session: AsyncSession,
+    *,
+    submission_id: UUID,
+    actor_user_id: UUID,
+) -> tuple[Submission, AssignmentRecipient, list[tuple[Feedback, User]]]:
+    """Return feedback only when the requester owns the submitted assignment.
+
+    An empty feedback list is a valid result when the teacher has not reviewed
+    the submission yet. Ownership failures intentionally share the same domain
+    error as missing submissions so callers cannot enumerate other students' work.
+    """
+    result = await session.execute(
+        select(Submission, AssignmentRecipient)
+        .join(
+            AssignmentRecipient,
+            AssignmentRecipient.id == Submission.assignment_recipient_id,
+        )
+        .where(Submission.id == submission_id)
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise DomainRuleViolation("Submission not found.")
+
+    submission, recipient = row
+    if recipient.student_id != actor_user_id:
+        raise DomainRuleViolation("Submission not found.")
+
+    feedback_result = await session.execute(
+        select(Feedback, User)
+        .join(User, User.id == Feedback.author_id)
+        .where(Feedback.submission_id == submission.id)
+        .order_by(Feedback.created_at.asc(), Feedback.id)
+    )
+    return submission, recipient, list(feedback_result.all())
