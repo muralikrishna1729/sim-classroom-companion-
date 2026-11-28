@@ -5,6 +5,7 @@ from sqlalchemy import text
 from app.core.config import get_settings
 from app.db.session import engine
 from app.api.auth import router as auth_router
+from app.api.classrooms import router as classrooms_router
 
 settings = get_settings()
 
@@ -34,6 +35,12 @@ app.include_router(
     auth_router,
     prefix="/api/v1",
 )
+
+app.include_router(
+    classrooms_router,
+    prefix="/api/v1",
+)
+
 
 @app.get("/", tags=["meta"])
 async def root() -> dict[str, str]:
