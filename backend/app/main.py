@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from app.core.config import get_settings
 from app.db.session import engine
+from app.api.auth import router as auth_router
 
 settings = get_settings()
 
@@ -20,6 +21,7 @@ app = FastAPI(
     description="Backend API for SIM Classroom Companion.",
     lifespan=lifespan,
 )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -28,6 +30,10 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+app.include_router(
+    auth_router,
+    prefix="/api/v1",
+)
 
 @app.get("/", tags=["meta"])
 async def root() -> dict[str, str]:
