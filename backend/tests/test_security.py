@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -46,7 +46,17 @@ def test_access_token_contains_user_subject_and_access_type(configured_jwt) -> N
 
 
 def test_expired_access_token_is_rejected(configured_jwt) -> None:
-    token = security.create_access_token(uuid4(), expires_delta=timedelta(seconds=-1))
+    now = datetime.now(timezone.utc)
+    token = jwt.encode(
+        {
+            "sub": str(uuid4()),
+            "iat": now - timedelta(minutes=2),
+            "exp": now - timedelta(minutes=1),
+            "token_type": "access",
+        },
+        "test-only-secret-key-that-is-long-enough-123456",
+        algorithm=security.JWT_ALGORITHM,
+    )
 
     with pytest.raises(jwt.ExpiredSignatureError):
         security.decode_access_token(token)
@@ -68,7 +78,7 @@ def test_token_signed_with_another_secret_is_rejected(configured_jwt, monkeypatc
 
 
 def test_non_access_token_is_rejected(configured_jwt) -> None:
-    now = security.datetime.now(security.timezone.utc)
+    now = datetime.now(timezone.utc)
     token = jwt.encode(
         {
             "sub": str(uuid4()),
@@ -85,7 +95,7 @@ def test_non_access_token_is_rejected(configured_jwt) -> None:
 
 
 def test_invalid_uuid_subject_is_rejected(configured_jwt) -> None:
-    now = security.datetime.now(security.timezone.utc)
+    now = datetime.now(timezone.utc)
     token = jwt.encode(
         {
             "sub": "not-a-uuid",
