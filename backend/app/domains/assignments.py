@@ -5,7 +5,7 @@ This keeps assignment and recipient writes atomic at the request/job boundary.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from uuid import UUID
 
@@ -24,6 +24,8 @@ from app.db.models import (
     Classroom,
     MembershipStatus,
     RecipientStatus,
+    Reminder,
+    ReminderStatus,
     School,
     SchoolMembership,
     SchoolRole,
@@ -206,18 +208,39 @@ async def create_assignment(
         for student_id, group_id in result.all():
             source_group_by_student.setdefault(student_id, group_id)
 
-    session.add_all(
-        [
-            AssignmentRecipient(
-                assignment_id=assignment.id,
-                student_id=student_id,
-                source_group_id=source_group_by_student.get(student_id),
-                status=RecipientStatus.PENDING,
-            )
-            for student_id in sorted(resolved_student_ids, key=str)
-        ]
-    )
+    recipient_rows = [
+        AssignmentRecipient(
+            assignment_id=assignment.id,
+            student_id=student_id,
+            source_group_id=source_group_by_student.get(student_id),
+            status=RecipientStatus.PENDING,
+        )
+        for student_id in sorted(resolved_student_ids, key=str)
+    ]
+    session.add_all(recipient_rows)
     await session.flush()
+
+    # One reminder is scheduled 24 hours before the deadline. If the
+    # assignment is created inside that window, make it eligible immediately.
+    if assignment.due_at is not None:
+        reminder_time = max(
+            _utc_now(),
+            assignment.due_at - timedelta(hours=24),
+        )
+        session.add_all(
+            [
+                Reminder(
+                    assignment_recipient_id=recipient.id,
+                    scheduled_at=reminder_time,
+                    status=ReminderStatus.PENDING,
+                    idempotency_key=(
+                        f"assignment:{assignment.id}:recipient:{recipient.id}:due-24h"
+                    ),
+                )
+                for recipient in recipient_rows
+            ]
+        )
+        await session.flush()
 
     due_label = (
         assignment.due_at.isoformat()
