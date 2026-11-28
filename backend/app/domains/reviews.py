@@ -91,3 +91,50 @@ async def review_submission(
     session.add(feedback)
     await session.flush()
     return submission, feedback, recipient
+
+
+async def list_classroom_submissions(
+    session: AsyncSession,
+    *,
+    classroom_id: UUID,
+    actor_user_id: UUID,
+) -> list[tuple[Submission, AssignmentRecipient, Assignment, UUID, str]]:
+    """List submissions in a classroom after verifying active teacher access.
+
+    The result includes the student's ID and display name, but never exposes
+    the private storage path for uploaded files. The caller owns the session.
+    """
+    teacher_result = await session.execute(
+        select(ClassMembership.id).where(
+            ClassMembership.classroom_id == classroom_id,
+            ClassMembership.user_id == actor_user_id,
+            ClassMembership.role == ClassRole.TEACHER,
+            ClassMembership.status == MembershipStatus.ACTIVE,
+        )
+    )
+    if teacher_result.scalar_one_or_none() is None:
+        raise DomainRuleViolation(
+            "An active teacher membership is required to view classroom submissions."
+        )
+
+    result = await session.execute(
+        select(
+            Submission,
+            AssignmentRecipient,
+            Assignment,
+            AssignmentRecipient.student_id,
+            User.full_name,
+        )
+        .join(
+            AssignmentRecipient,
+            AssignmentRecipient.id == Submission.assignment_recipient_id,
+        )
+        .join(Assignment, Assignment.id == AssignmentRecipient.assignment_id)
+        .join(User, User.id == AssignmentRecipient.student_id)
+        .where(
+            Assignment.classroom_id == classroom_id,
+            Assignment.status == AssignmentStatus.ASSIGNED,
+        )
+        .order_by(Submission.created_at.desc(), Submission.id)
+    )
+    return list(result.all())
