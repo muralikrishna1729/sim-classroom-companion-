@@ -1,35 +1,30 @@
 from functools import lru_cache
+from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+ENV_FILE = PROJECT_ROOT / ".env"
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
-    model_config = SettingsConfigDict(
-        env_file="backend/.env", env_file_encoding="utf-8",
-        case_sensitive=False, extra="ignore",
-    )
+    model_config = SettingsConfigDict(env_file=ENV_FILE, env_file_encoding="utf-8", case_sensitive=False, extra="ignore")
     app_name: str = "SIM Classroom Companion API"
     app_env: str = "development"
     api_v1_prefix: str = "/api/v1"
     log_level: str = "INFO"
-    database_url: str = Field(
-        default="postgresql+asyncpg://classroom_app:classroom_local_dev@localhost:5432/classroom_companion"
-    )
+    database_url: str = Field(default="postgresql+asyncpg://classroom_app:classroom_local_dev@localhost:5432/classroom_companion")
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     groq_api_key: str | None = None
     groq_model: str | None = None
     telegram_bot_token: str | None = None
     default_school_timezone: str = "Asia/Kolkata"
-
-    # Authentication settings. The secret must be supplied through the environment.
     jwt_secret_key: str | None = Field(default=None, min_length=32)
     access_token_expire_minutes: int = Field(default=30, gt=0, le=1440)
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
-
 
 @lru_cache
 def get_settings() -> Settings:
