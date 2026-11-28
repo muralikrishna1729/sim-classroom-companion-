@@ -9,11 +9,23 @@ from app.db.models import User
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.domains.assignments import DomainRuleViolation
-from app.domains.submissions import create_submission
+from app.domains.submissions import (
+    create_submission,
+    get_student_submission_feedback,
+    get_student_assignment_history,
+)
 from app.schemas.assignment import SubmissionResponse
+from app.schemas.review import (
+    StudentFeedbackItem,
+    StudentSubmissionFeedbackResponse,
+    StudentAssignmentHistoryResponse,
+    StudentAssignmentHistoryAttempt,
+    StudentAssignmentHistoryFeedback,
+)
 from app.storage.local import save_submission_file, delete_submission_file
 
 router = APIRouter(prefix="/assignments", tags=["Submissions"])
+feedback_router = APIRouter(prefix="/submissions", tags=["Student Feedback"])
 
 
 @router.post(
@@ -105,4 +117,100 @@ async def submit_assignment(
         file_name=submission.file_name,
         mime_type=submission.mime_type,
         file_size_bytes=submission.file_size_bytes,
+    )
+
+@feedback_router.get(
+    "/{submission_id}/feedback",
+    response_model=StudentSubmissionFeedbackResponse,
+)
+async def get_submission_feedback(
+    submission_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> StudentSubmissionFeedbackResponse:
+    """Let a student view feedback on their own submission only."""
+    try:
+        submission, recipient, feedback_rows = await get_student_submission_feedback(
+            db,
+            submission_id=submission_id,
+            actor_user_id=current_user.id,
+        )
+    except DomainRuleViolation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Submission not found.",
+        ) from None
+
+    return StudentSubmissionFeedbackResponse(
+        submission_id=submission.id,
+        recipient_status=recipient.status,
+        feedback=[
+            StudentFeedbackItem(
+                feedback_id=feedback.id,
+                author_id=feedback.author_id,
+                author_name=author.full_name,
+                feedback_text=feedback.feedback_text,
+                created_at=feedback.created_at,
+            )
+            for feedback, author in feedback_rows
+        ],
+    )
+
+
+@feedback_router.get(
+    "/recipients/{recipient_id}/history",
+    response_model=StudentAssignmentHistoryResponse,
+)
+async def get_assignment_history(
+    recipient_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> StudentAssignmentHistoryResponse:
+    """Return assignment details and the student's complete submission/review history."""
+    try:
+        assignment, recipient, history = await get_student_assignment_history(
+            db,
+            recipient_id=recipient_id,
+            actor_user_id=current_user.id,
+        )
+    except DomainRuleViolation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment history not found.",
+        ) from None
+
+    attempts = []
+    for submission, feedback_rows in history:
+        attempts.append(
+            StudentAssignmentHistoryAttempt(
+                submission_id=submission.id,
+                submitted_at=submission.created_at,
+                text_content=submission.text_content,
+                file_name=submission.file_name,
+                mime_type=submission.mime_type,
+                file_size_bytes=submission.file_size_bytes,
+                feedback=[
+                    StudentAssignmentHistoryFeedback(
+                        feedback_id=feedback.id,
+                        author_id=feedback.author_id,
+                        author_name=author.full_name,
+                        feedback_text=feedback.feedback_text,
+                        created_at=feedback.created_at,
+                    )
+                    for feedback, author in feedback_rows
+                ],
+            )
+        )
+
+    return StudentAssignmentHistoryResponse(
+        assignment_id=assignment.id,
+        assignment_title=assignment.title,
+        assignment_instructions=assignment.instructions,
+        assignment_status=assignment.status.value,
+        due_at=assignment.due_at,
+        timezone=assignment.timezone,
+        recipient_id=recipient.id,
+        recipient_status=recipient.status,
+        blocked_reason=recipient.blocked_reason,
+        attempts=attempts,
     )

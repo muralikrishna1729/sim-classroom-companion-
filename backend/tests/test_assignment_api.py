@@ -252,3 +252,137 @@ def test_teacher_assignment_listing_does_not_expose_student_progress(client, stu
     assert response.status_code == 200
     assert response.json()[0]["recipient_id"] is None
     assert response.json()[0]["my_status"] is None
+
+
+@pytest.mark.parametrize(
+    ("target_type", "target_field"),
+    [
+        ("individual", "student_ids"),
+        ("group", "group_ids"),
+    ],
+)
+def test_teacher_can_create_targeted_assignment(
+    client, student, monkeypatch, target_type, target_field
+):
+    authenticate_as(student)
+    classroom_id = uuid4()
+    target_ids = [uuid4(), uuid4()]
+    assignment = SimpleNamespace(
+        id=uuid4(),
+        classroom_id=classroom_id,
+        created_by_id=student.id,
+        title="Targeted assignment",
+        instructions="Complete the assigned task.",
+        target_type=AssignmentTargetType(target_type),
+        status=AssignmentStatus.ASSIGNED,
+        due_at=None,
+        timezone="Asia/Kolkata",
+    )
+    captured = {}
+
+    async def create(db, **kwargs):
+        captured.update(kwargs)
+        return assignment
+
+    monkeypatch.setattr("app.api.assignments.create_assignment", create)
+    payload = {
+        "classroom_id": str(classroom_id),
+        "title": "Targeted assignment",
+        "instructions": "Complete the assigned task.",
+        "target_type": target_type,
+        "timezone": "Asia/Kolkata",
+        target_field: [str(value) for value in target_ids],
+    }
+    response = client.post("/api/v1/assignments", json=payload)
+
+    assert response.status_code == 201
+    assert captured[target_field] == target_ids
+    assert captured["target_type"] == AssignmentTargetType(target_type)
+    assert response.json()["target_type"] == target_type
+
+
+
+def test_teacher_can_get_assignment_progress(client, student, monkeypatch):
+    authenticate_as(student)
+    assignment_id = uuid4()
+    recipient_id = uuid4()
+    student_id = uuid4()
+    recipient = SimpleNamespace(
+        id=recipient_id,
+        student_id=student_id,
+        status=RecipientStatus.IN_PROGRESS,
+        blocked_reason=None,
+        acknowledged_at=None,
+        submitted_at=None,
+        completed_at=None,
+    )
+    assignment = SimpleNamespace(id=assignment_id, status=AssignmentStatus.ASSIGNED)
+    captured = {}
+
+    async def progress(db, **kwargs):
+        captured.update(kwargs)
+        return assignment, [recipient], {recipient_id: "Learner One"}
+
+    monkeypatch.setattr("app.api.assignments.get_teacher_assignment_progress", progress)
+    response = client.get(f"/api/v1/assignments/{assignment_id}/progress")
+
+    assert response.status_code == 200
+    assert captured["assignment_id"] == assignment_id
+    assert captured["actor_user_id"] == student.id
+    data = response.json()
+    assert data["total_recipients"] == 1
+    assert data["status_counts"] == {"in_progress": 1}
+    assert data["recipients"][0]["student_name"] == "Learner One"
+
+
+def test_teacher_can_cancel_assignment(client, student, monkeypatch):
+    authenticate_as(student)
+    assignment_id = uuid4()
+    assignment = SimpleNamespace(id=assignment_id, status=AssignmentStatus.CANCELLED)
+    captured = {}
+
+    async def cancel(db, **kwargs):
+        captured.update(kwargs)
+        return assignment
+
+    monkeypatch.setattr("app.api.assignments.cancel_assignment", cancel)
+    response = client.post(f"/api/v1/assignments/{assignment_id}/cancel")
+
+    assert response.status_code == 200
+    assert captured["assignment_id"] == assignment_id
+    assert captured["actor_user_id"] == student.id
+    assert response.json() == {
+        "assignment_id": str(assignment_id),
+        "status": "cancelled",
+    }
+
+
+
+def test_student_assignment_listing_shows_cancelled_assignment(client, student, monkeypatch):
+    authenticate_as(student)
+    assignment = SimpleNamespace(
+        id=uuid4(),
+        classroom_id=uuid4(),
+        created_by_id=uuid4(),
+        title="Cancelled science task",
+        instructions="This task was cancelled.",
+        target_type=AssignmentTargetType.CLASS,
+        status=AssignmentStatus.CANCELLED,
+        due_at=None,
+        timezone="Asia/Kolkata",
+    )
+    recipient = SimpleNamespace(
+        id=uuid4(),
+        status=RecipientStatus.PENDING,
+        blocked_reason=None,
+    )
+
+    async def listing(db, **kwargs):
+        return [(assignment, recipient)]
+
+    monkeypatch.setattr("app.api.assignments.list_user_assignments", listing)
+    response = client.get("/api/v1/assignments")
+
+    assert response.status_code == 200
+    assert response.json()[0]["status"] == "cancelled"
+    assert response.json()[0]["recipient_id"] == str(recipient.id)

@@ -106,3 +106,26 @@ class SubmissionResponse(BaseModel):
     file_name: str | None
     mime_type: str | None
     file_size_bytes: int | None
+
+class TeacherAssignmentRecipientProgress(BaseModel):
+    recipient_id: UUID
+    student_id: UUID
+    student_name: str
+    status: RecipientStatus
+    blocked_reason: str | None
+    acknowledged_at: datetime | None
+    submitted_at: datetime | None
+    completed_at: datetime | None
+
+
+class TeacherAssignmentProgressResponse(BaseModel):
+    assignment_id: UUID
+    assignment_status: str
+    total_recipients: int
+    status_counts: dict[str, int]
+    recipients: list[TeacherAssignmentRecipientProgress]
+
+
+class AssignmentCancellationResponse(BaseModel):
+    assignment_id: UUID
+    status: str
