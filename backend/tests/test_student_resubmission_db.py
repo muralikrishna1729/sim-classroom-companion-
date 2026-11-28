@@ -25,7 +25,7 @@ from app.db.models import (
 )
 from app.domains.assignments import DomainRuleViolation
 from app.domains.reviews import list_classroom_submissions, review_submission
-from app.domains.submissions import create_submission
+from app.domains.submissions import create_submission, get_student_assignment_history
 
 
 def test_student_can_resubmit_after_revision_and_history_is_preserved():
@@ -143,6 +143,19 @@ def test_student_can_resubmit_after_revision_and_history_is_preserved():
             assert saved_feedback.feedback_text == (
                 "Please explain condensation in more detail."
             )
+
+            history_assignment, history_recipient, history = await get_student_assignment_history(
+                session,
+                recipient_id=recipient.id,
+                actor_user_id=student.id,
+            )
+            assert history_assignment.id == assignment.id
+            assert history_recipient.status == RecipientStatus.SUBMITTED
+            assert len(history) == 2
+            assert history[0][0].id == first_submission.id
+            assert history[0][1][0][0].id == first_feedback.id
+            assert history[1][0].id == second_submission.id
+            assert history[1][1] == []
 
             # Teachers see every attempt, with a clear latest-attempt marker.
             teacher_rows = await list_classroom_submissions(
