@@ -1,5 +1,6 @@
 """Database-backed tests for teacher assignment targeting and distribution."""
 import asyncio
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -18,6 +19,8 @@ from app.db.models import (
     MembershipStatus,
     Notification,
     RecipientStatus,
+    Reminder,
+    ReminderStatus,
     School,
     StudentGroup,
     StudentGroupMembership,
@@ -135,6 +138,37 @@ def test_class_assignment_creates_recipient_for_each_active_student():
 
     run_test(scenario)
 
+
+
+def test_assignment_with_due_date_schedules_one_24_hour_reminder_per_recipient():
+    async def scenario(session):
+        _, teacher, students, classroom, _ = await seed_classroom(session)
+        due_at = datetime.now(timezone.utc) + timedelta(days=3)
+        assignment = await create_assignment(
+            session,
+            actor_user_id=teacher.id,
+            classroom_id=classroom.id,
+            title="Reminder task",
+            instructions="Submit before the deadline.",
+            target_type=AssignmentTargetType.CLASS,
+            timezone_name="Asia/Kolkata",
+            due_at=due_at,
+        )
+        reminders = list((await session.scalars(
+            select(Reminder)
+            .join(AssignmentRecipient)
+            .where(AssignmentRecipient.assignment_id == assignment.id)
+        )).all())
+        assert len(reminders) == 3
+        assert {item.status for item in reminders} == {ReminderStatus.PENDING}
+        assert all(
+            abs((item.scheduled_at - (due_at - timedelta(hours=24))).total_seconds()) < 1
+            for item in reminders
+        )
+        assert len({item.idempotency_key for item in reminders}) == 3
+        assert all(item.idempotency_key.endswith(":due-24h") for item in reminders)
+
+    run_test(scenario)
 
 def test_individual_assignment_targets_only_selected_active_students():
     async def scenario(session):
