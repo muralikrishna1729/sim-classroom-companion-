@@ -12,6 +12,8 @@ from uuid import UUID
 from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.notifications import create_notification
+
 from app.db.models import (
     Assignment,
     AssignmentRecipient,
@@ -216,6 +218,27 @@ async def create_assignment(
         ]
     )
     await session.flush()
+
+    due_label = (
+        assignment.due_at.isoformat()
+        if assignment.due_at is not None
+        else None
+    )
+    for student_id in sorted(resolved_student_ids, key=str):
+        await create_notification(
+            session,
+            user_id=student_id,
+            notification_type="assignment_assigned",
+            title="New assignment",
+            message=f'{assignment.title} has been assigned to you.',
+            entity_type="assignment",
+            entity_id=assignment.id,
+            payload={
+                "assignment_title": assignment.title,
+                "classroom_id": str(classroom_id),
+                "due_at": due_label,
+            },
+        )
     return assignment
 
 
