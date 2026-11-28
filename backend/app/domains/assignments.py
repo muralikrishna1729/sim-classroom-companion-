@@ -23,6 +23,8 @@ from app.db.models import (
     MembershipStatus,
     RecipientStatus,
     School,
+    SchoolMembership,
+    SchoolRole,
     StudentGroup,
     StudentGroupMembership,
 )
