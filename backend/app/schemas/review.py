@@ -29,3 +29,23 @@ class ReviewSubmissionResponse(BaseModel):
     recipient_id: UUID
     recipient_status: RecipientStatus
     completed_at: datetime | None
+
+
+class TeacherSubmissionListItem(BaseModel):
+    """Submission details safe to return to an authorized classroom teacher."""
+
+    submission_id: UUID
+    assignment_id: UUID
+    assignment_title: str
+    assignment_instructions: str
+    due_at: datetime | None
+    recipient_id: UUID
+    student_id: UUID
+    student_name: str
+    recipient_status: RecipientStatus
+    submitted_at: datetime | None
+    submission_created_at: datetime
+    text_content: str | None
+    file_name: str | None
+    mime_type: str | None
+    file_size_bytes: int | None
