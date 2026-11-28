@@ -27,6 +27,7 @@ from app.db.models import (
     SchoolRole,
     StudentGroup,
     StudentGroupMembership,
+    User,
 )
 
 
@@ -336,3 +337,82 @@ async def list_user_assignments(
 
     result = await session.execute(query)
     return list(result.all())
+
+
+async def get_teacher_assignment_progress(
+    session: AsyncSession,
+    *,
+    assignment_id: UUID,
+    actor_user_id: UUID,
+) -> tuple[Assignment, list[AssignmentRecipient], dict[UUID, str]]:
+    """Return recipient progress for an assignment in a teacher's classroom."""
+    result = await session.execute(
+        select(Assignment)
+        .where(
+            Assignment.id == assignment_id,
+            Assignment.status == AssignmentStatus.ASSIGNED,
+        )
+        .with_for_update(read=True)
+    )
+    assignment = result.scalar_one_or_none()
+    if assignment is None:
+        raise DomainRuleViolation("Assignment does not exist or is unavailable.")
+
+    teacher_result = await session.execute(
+        select(ClassMembership.id).where(
+            ClassMembership.classroom_id == assignment.classroom_id,
+            ClassMembership.user_id == actor_user_id,
+            ClassMembership.role == ClassRole.TEACHER,
+            ClassMembership.status == MembershipStatus.ACTIVE,
+        )
+    )
+    if teacher_result.scalar_one_or_none() is None:
+        raise DomainRuleViolation("An active teacher membership is required to view assignment progress.")
+
+    rows = await session.execute(
+        select(AssignmentRecipient, User.full_name)
+        .join(User, User.id == AssignmentRecipient.student_id)
+        .where(AssignmentRecipient.assignment_id == assignment.id)
+        .order_by(User.full_name, AssignmentRecipient.student_id)
+    )
+    recipients: list[AssignmentRecipient] = []
+    names: dict[UUID, str] = {}
+    for recipient, full_name in rows.all():
+        recipients.append(recipient)
+        names[recipient.id] = full_name
+    return assignment, recipients, names
+
+
+async def cancel_assignment(
+    session: AsyncSession,
+    *,
+    assignment_id: UUID,
+    actor_user_id: UUID,
+) -> Assignment:
+    """Cancel an assigned classroom task without deleting its history."""
+    result = await session.execute(
+        select(Assignment)
+        .where(
+            Assignment.id == assignment_id,
+            Assignment.status == AssignmentStatus.ASSIGNED,
+        )
+        .with_for_update()
+    )
+    assignment = result.scalar_one_or_none()
+    if assignment is None:
+        raise DomainRuleViolation("Assignment does not exist or is not currently assigned.")
+
+    teacher_result = await session.execute(
+        select(ClassMembership.id).where(
+            ClassMembership.classroom_id == assignment.classroom_id,
+            ClassMembership.user_id == actor_user_id,
+            ClassMembership.role == ClassRole.TEACHER,
+            ClassMembership.status == MembershipStatus.ACTIVE,
+        )
+    )
+    if teacher_result.scalar_one_or_none() is None:
+        raise DomainRuleViolation("An active teacher membership is required to cancel this assignment.")
+
+    assignment.status = AssignmentStatus.CANCELLED
+    await session.flush()
+    return assignment
